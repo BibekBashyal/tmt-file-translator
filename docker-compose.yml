@@ -1,0 +1,42 @@
+
+services:
+  doc-service:
+    build:
+      context: ./doc-service-python
+      dockerfile: Dockerfile
+    container_name: tmt-doc-service
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  orchestrator:
+    build:
+      context: ./orchestrator-java
+      dockerfile: Dockerfile
+    container_name: tmt-orchestrator
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_DOC_SERVICE_URL=http://doc-service:8000
+      - APP_TMT_API_MOCK=true
+      - SPRING_THREADS_VIRTUAL_ENABLED=true
+    depends_on:
+      doc-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+    container_name: tmt-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - orchestrator
+    restart: unless-stopped

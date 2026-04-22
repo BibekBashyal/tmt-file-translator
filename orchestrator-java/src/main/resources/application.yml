@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tmt-orchestrator
+  threads:
+    virtual:
+      enabled: true
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 1MB
+
+app:
+  doc-service-url: ${APP_DOC_SERVICE_URL:http://localhost:8000}
+  tmt-api:
+    mock: ${APP_TMT_API_MOCK:true}
+    url: ${APP_TMT_API_URL:https://tmt-api.example.com/translate}
+    batch-size: 25
+    max-chars-per-batch: 5000
+    retry:
+      max-attempts: 3
+      initial-delay-ms: 200
+  cache:
+    max-size: 50000
+    expire-hours: 6
+
+logging:
+  level:
+    com.tmt: DEBUG
