@@ -107,7 +107,7 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
         </div>
 
         {/* Inline preview panel */}
-        {showPreview && <FilePreview file={file} />}
+        {showPreview && <FilePreview file={file} onFileUpdate={setFile} />}
       </div>
     );
   }
