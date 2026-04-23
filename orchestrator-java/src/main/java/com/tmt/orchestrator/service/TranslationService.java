@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
@@ -48,41 +50,39 @@ public class TranslationService {
         List<Segment> segments, String sourceLang, String targetLang
     ) {
         List<List<Segment>> batches = createBatches(segments);
-        log.info("Created {} batches from {} segments", batches.size(), segments.size());
+        log.info("Translating {} batches ({} segments) in parallel", batches.size(), segments.size());
 
-        List<Segment> allTranslated = new ArrayList<>();
-        int apiCalls = 0;
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<List<Segment>>> futures = batches.stream()
+                .map(batch -> CompletableFuture.supplyAsync(
+                    () -> translateBatch(batch, sourceLang, targetLang), executor
+                ))
+                .toList();
 
-        for (int i = 0; i < batches.size(); i++) {
-            List<Segment> batch = batches.get(i);
-            log.debug("Translating batch {}/{} ({} segments)", i + 1, batches.size(), batch.size());
-
-            List<String> texts = batch.stream()
-                .map(Segment::text)
-                .collect(Collectors.toList());
-
-            List<String> translatedTexts = translateWithRetry(texts, sourceLang, targetLang);
-            apiCalls++;
-
-            // Map translated texts back to segments, preserving meta
-            for (int j = 0; j < batch.size(); j++) {
-                Segment original = batch.get(j);
-                String translated = j < translatedTexts.size()
-                    ? translatedTexts.get(j)
-                    : "[translation failed]";
-                allTranslated.add(original.withText(translated));
+            List<Segment> allTranslated = new ArrayList<>();
+            for (var future : futures) {
+                allTranslated.addAll(future.join());
             }
+            log.info("Parallel translation complete: {} segments", allTranslated.size());
+            return allTranslated;
         }
-
-        log.info("Translation complete: {} segments, {} API calls", allTranslated.size(), apiCalls);
-        return allTranslated;
     }
 
-    /**
-     * Get the number of API calls needed for the given segments.
-     */
     public int estimateApiCalls(List<Segment> segments) {
         return createBatches(segments).size();
+    }
+
+    private List<Segment> translateBatch(List<Segment> batch, String sourceLang, String targetLang) {
+        List<String> texts = batch.stream().map(Segment::text).toList();
+        List<String> translatedTexts = translateWithRetry(texts, sourceLang, targetLang);
+
+        List<Segment> result = new ArrayList<>();
+        for (int j = 0; j < batch.size(); j++) {
+            result.add(batch.get(j).withText(
+                j < translatedTexts.size() ? translatedTexts.get(j) : "[translation failed]"
+            ));
+        }
+        return result;
     }
 
     /**

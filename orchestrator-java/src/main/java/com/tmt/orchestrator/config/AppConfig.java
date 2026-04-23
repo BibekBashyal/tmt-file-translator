@@ -21,11 +21,10 @@ public class AppConfig {
      */
     @Bean
     public WebClient docServiceWebClient() {
-        // Increase buffer size to 2MB for file transfers
         ExchangeStrategies strategies = ExchangeStrategies.builder()
             .codecs(configurer -> configurer
                 .defaultCodecs()
-                .maxInMemorySize(2 * 1024 * 1024))
+                .maxInMemorySize(10 * 1024 * 1024))
             .build();
 
         return WebClient.builder()

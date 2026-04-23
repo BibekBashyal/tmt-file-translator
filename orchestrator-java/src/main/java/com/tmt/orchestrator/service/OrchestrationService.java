@@ -9,11 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -135,19 +131,8 @@ public class OrchestrationService {
         return new TranslationResult(reconstructedFile, stats);
     }
 
-    /**
-     * Build a cache key from text + language pair using SHA-256.
-     */
     private String buildCacheKey(String text, String sourceLang, String targetLang) {
-        try {
-            String input = text + "|" + sourceLang + "|" + targetLang;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 is always available in JDK
-            throw new RuntimeException(e);
-        }
+        return sourceLang + "\0" + targetLang + "\0" + text;
     }
 
     /**

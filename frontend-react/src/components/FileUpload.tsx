@@ -1,15 +1,20 @@
-import React, { useCallback } from 'react';
-import { UploadCloud, FileText, X, AlertCircle } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { UploadCloud, FileText, X, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { FilePreview } from './FilePreview';
 
 interface FileUploadProps {
   file: File | null;
-  setFile: (file: File | null) => void;
+  setFile: (file: File) => void;
+  onRemove: () => void;
   disabled: boolean;
+  isProcessing: boolean;
 }
 
-export function FileUpload({ file, setFile, disabled }: FileUploadProps) {
+export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: FileUploadProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (selectedFile: File) => {
     setError(null);
@@ -21,8 +26,8 @@ export function FileUpload({ file, setFile, disabled }: FileUploadProps) {
       return false;
     }
     
-    if (selectedFile.size > 1024 * 1024) {
-      setError('File too large. Maximum size is 1MB.');
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError('File too large. Maximum size is 10MB.');
       return false;
     }
     
@@ -42,6 +47,12 @@ export function FileUpload({ file, setFile, disabled }: FileUploadProps) {
     }
   }, [disabled, setFile]);
 
+  const handleRemove = () => {
+    if (inputRef.current) inputRef.current.value = '';
+    setShowPreview(false);
+    onRemove();
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
@@ -52,25 +63,51 @@ export function FileUpload({ file, setFile, disabled }: FileUploadProps) {
   };
 
   if (file) {
+    const ext = file.name.split('.').pop()?.toUpperCase() ?? 'FILE';
     return (
-      <div className="glass-panel rounded-2xl p-6 flex items-center justify-between animate-fade-in border-accent-blue/30 bg-accent-blue/5">
-        <div className="flex items-center space-x-4">
-          <div className="p-3 bg-accent-blue/20 rounded-xl">
-            <FileText className="w-8 h-8 text-accent-blue" />
+      <div className="flex flex-col gap-3 animate-fade-in">
+        {/* File card */}
+        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between border-accent-blue/30 bg-accent-blue/5">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-accent-blue/20 rounded-xl">
+              <FileText className="w-7 h-7 text-accent-blue" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-text-main leading-tight">{file.name}</h3>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-accent-blue/20 text-accent-blue">{ext}</span>
+                <span className="text-xs text-text-muted">{(file.size / 1024).toFixed(1)} KB</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-text-main">{file.name}</h3>
-            <p className="text-sm text-text-muted">{(file.size / 1024).toFixed(1)} KB</p>
+
+          <div className="flex items-center gap-2">
+            {!isProcessing && (
+              <button
+                onClick={() => setShowPreview(p => !p)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border
+                  ${showPreview
+                    ? 'bg-accent-blue/20 border-accent-blue/40 text-accent-blue'
+                    : 'bg-white/5 border-border text-text-muted hover:text-text-main hover:bg-white/10'}`}
+              >
+                {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPreview ? 'Hide' : 'Preview'}
+              </button>
+            )}
+            {!isProcessing && (
+              <button
+                onClick={handleRemove}
+                className="p-2 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors text-text-muted"
+                title="Remove file"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-        {!disabled && (
-          <button 
-            onClick={() => setFile(null)}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5 text-text-muted" />
-          </button>
-        )}
+
+        {/* Inline preview panel */}
+        {showPreview && <FilePreview file={file} />}
       </div>
     );
   }
@@ -93,12 +130,13 @@ export function FileUpload({ file, setFile, disabled }: FileUploadProps) {
           <p className="mb-2 text-sm text-text-main">
             <span className="font-semibold text-accent-blue">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-text-muted">PDF, DOCX, CSV, TSV (Max. 1MB)</p>
+          <p className="text-xs text-text-muted">PDF, DOCX, CSV, TSV (Max. 10MB)</p>
         </div>
-        <input 
-          type="file" 
-          className="hidden" 
-          accept=".pdf,.docx,.csv,.tsv" 
+        <input
+          ref={inputRef}
+          type="file"
+          className="hidden"
+          accept=".pdf,.docx,.csv,.tsv"
           onChange={handleChange}
           disabled={disabled}
         />

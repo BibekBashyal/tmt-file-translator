@@ -1,24 +1,43 @@
-import { Languages, Sparkles } from 'lucide-react';
 
 export function Header() {
   return (
-    <header className="w-full py-8 mb-8 text-center animate-fade-in relative">
-      {/* Background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[200px] bg-accent-blue/10 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
-      
-      <div className="inline-flex items-center justify-center space-x-3 mb-4 px-4 py-1.5 rounded-full border border-border bg-secondary/50 backdrop-blur-sm">
-        <Sparkles className="w-4 h-4 text-accent-teal" />
-        <span className="text-sm font-medium tracking-wider text-text-muted uppercase">Google TMT Hackathon 2026</span>
+    <header className="w-full pt-6 pb-8 mb-6 animate-fade-in">
+      {/* Top branding row */}
+      <div className="flex items-center justify-center gap-5 mb-6">
+        <img src="/ku-logo.png" alt="Kathmandu University" className="w-16 h-16 flex-shrink-0 object-contain" />
+
+        <div className="text-left">
+          <p className="text-xs font-semibold tracking-widest text-accent-blue uppercase mb-0.5">
+            Kathmandu University
+          </p>
+          <h2 className="text-xl font-bold text-text-main leading-tight">
+            TMT भाषा अनुवादक
+          </h2>
+          <p className="text-xs text-text-muted mt-0.5 tracking-wide">
+            File Translation Tool · Google TMT Hackathon 2026
+          </p>
+        </div>
       </div>
-      
-      <h1 className="text-5xl md:text-6xl font-bold mb-4 tracking-tight">
-        Seamless <span className="text-gradient">Translation</span>
-      </h1>
-      
-      <p className="text-lg text-text-muted max-w-2xl mx-auto flex items-center justify-center gap-2">
-        <Languages className="w-5 h-5" />
-        Preserve layout and format across English, Nepali, and Tamang.
-      </p>
+
+      {/* Dhaka-border divider */}
+      <div className="w-full h-px mb-6" style={{
+        background: 'linear-gradient(to right, transparent, #1e6ebe, #f0f0f0, #c8001f, #1b7340, #d4a017, transparent)'
+      }} />
+
+      {/* Main headline */}
+      <div className="text-center">
+        <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">
+          <span className="text-gradient">लेआउट-संरक्षित</span>{' '}
+          <span className="text-text-main">अनुवाद</span>
+        </h1>
+        <p className="text-base text-text-muted max-w-xl mx-auto">
+          Translate documents between{' '}
+          <span className="text-text-main font-medium">English</span>,{' '}
+          <span className="text-text-main font-medium">नेपाली</span>, and{' '}
+          <span className="text-text-main font-medium">तामाङ</span>{' '}
+          — exact layout preserved.
+        </p>
+      </div>
     </header>
   );
 }

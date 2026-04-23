@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 /**
  * Mock TMT API client for development and testing.
@@ -21,7 +20,6 @@ import java.util.Random;
 public class MockTmtApiClient implements TmtApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(MockTmtApiClient.class);
-    private final Random random = new Random();
 
     // Sample translations for demo purposes
     private static final Map<String, Map<String, String>> SAMPLE_TRANSLATIONS = Map.of(
@@ -48,13 +46,6 @@ public class MockTmtApiClient implements TmtApiClient {
     @Override
     public List<String> translate(List<String> texts, String sourceLang, String targetLang) {
         log.info("Mock translating {} texts: {} → {}", texts.size(), sourceLang, targetLang);
-
-        // Simulate API latency (50-200ms per batch)
-        try {
-            Thread.sleep(50 + random.nextInt(150));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
 
         List<String> results = new ArrayList<>();
         String targetLabel = LANG_LABELS.getOrDefault(targetLang, targetLang.toUpperCase());

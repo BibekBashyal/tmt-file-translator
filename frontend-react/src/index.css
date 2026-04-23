@@ -1,60 +1,83 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #0a0e1a;
-  --color-secondary: #1a2235;
-  --color-accent-blue: #3b82f6;
-  --color-accent-teal: #14b8a6;
-  --color-text-main: #f8fafc;
-  --color-text-muted: #94a3b8;
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-glass: rgba(26, 34, 53, 0.7);
+  --color-primary: #0c0404;
+  --color-secondary: #1a0808;
+  --color-accent-blue: #c9930f;
+  --color-accent-teal: #d4622a;
+  --color-text-main: #fdf0e0;
+  --color-text-muted: #b89a76;
+  --color-border: rgba(201, 147, 15, 0.2);
+  --color-glass: rgba(16, 4, 4, 0.82);
+}
+
+/* Prayer flag strip — five elements (blue, white, red, green, yellow) */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(to right,
+    #1e6ebe 0% 20%,
+    #f0f0f0 20% 40%,
+    #c8001f 40% 60%,
+    #1b7340 60% 80%,
+    #d4a017 80% 100%
+  );
+  z-index: 9999;
 }
 
 body {
-  @apply bg-primary text-text-main font-sans antialiased min-h-screen selection:bg-accent-blue/30 selection:text-white;
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(20, 184, 166, 0.08), transparent 25%);
+  @apply bg-primary text-text-main font-sans antialiased min-h-screen;
+  padding-top: 5px;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 3 L45 24 L24 45 L3 24 Z' fill='none' stroke='rgba(201,147,15,0.045)' stroke-width='1'/%3E%3Cpath d='M24 12 L36 24 L24 36 L12 24 Z' fill='none' stroke='rgba(201,147,15,0.03)' stroke-width='0.5'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 15% 45%, rgba(201, 147, 15, 0.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 85% 25%, rgba(139, 26, 26, 0.07) 0%, transparent 40%);
 }
 
 /* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full hover:bg-slate-600 transition-colors;
+  background: rgba(201, 147, 15, 0.25);
+  border-radius: 999px;
 }
+::-webkit-scrollbar-thumb:hover { background: rgba(201, 147, 15, 0.45); }
 
-/* Glassmorphism utilities */
+/* Glassmorphism */
 .glass-panel {
   @apply bg-glass backdrop-blur-xl border border-border shadow-2xl;
 }
 
-/* Gradient Text */
+/* Gradient text */
 .text-gradient {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-blue to-accent-teal;
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #d4a017 0%, #e07b39 100%);
 }
 
-/* Smooth animations */
+/* Dhaka border — top accent line on key panels */
+.dhaka-top {
+  border-top: 2px solid;
+  border-image: linear-gradient(to right, #1e6ebe, #f0f0f0, #c8001f, #1b7340, #d4a017) 1;
+}
+
 .animate-fade-in {
-  animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: fadeIn 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

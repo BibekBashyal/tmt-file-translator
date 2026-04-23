@@ -15,14 +15,18 @@ function App() {
   
   const { state, error, stats, translateFile, reset } = useTranslation();
 
+  const isProcessing = state === 'uploading' || state === 'processing';
+
   const handleTranslate = () => {
     if (file) {
       translateFile(file, sourceLang, targetLang);
     }
   };
 
-  const isProcessing = state === 'uploading' || state === 'processing';
-  const isDone = state === 'done';
+  const handleRemoveFile = () => {
+    setFile(null);
+    reset();
+  };
 
   return (
     <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
@@ -39,45 +43,45 @@ function App() {
             
             <div className="relative z-10 space-y-10">
               
-              <FileUpload 
-                file={file} 
-                setFile={setFile} 
-                disabled={isProcessing || isDone} 
+              <FileUpload
+                file={file}
+                setFile={setFile}
+                onRemove={handleRemoveFile}
+                disabled={isProcessing}
+                isProcessing={isProcessing}
               />
-              
+
               <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-border to-transparent"></div>
 
-              <LanguageSelector 
+              <LanguageSelector
                 sourceLang={sourceLang}
                 targetLang={targetLang}
                 onSourceChange={setSourceLang}
                 onTargetChange={setTargetLang}
-                disabled={isProcessing || isDone}
+                disabled={isProcessing}
               />
 
               {/* Action Button */}
-              {!isDone && (
-                <div className="pt-4 flex justify-center">
-                  <button
-                    onClick={handleTranslate}
-                    disabled={!file || isProcessing}
-                    className={`
-                      relative group overflow-hidden px-10 py-4 rounded-full font-semibold text-lg transition-all duration-300
-                      ${!file || isProcessing 
-                        ? 'bg-secondary text-text-muted cursor-not-allowed border border-border' 
-                        : 'bg-white text-primary hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.2)]'}
-                    `}
-                  >
-                    {!file || isProcessing ? null : (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out"></div>
-                    )}
-                    <span className="relative flex items-center gap-2">
-                      {isProcessing ? 'Processing...' : 'Translate Document'}
-                      {!isProcessing && <Sparkles className="w-5 h-5" />}
-                    </span>
-                  </button>
-                </div>
-              )}
+              <div className="pt-4 flex justify-center">
+                <button
+                  onClick={handleTranslate}
+                  disabled={!file || isProcessing}
+                  className={`
+                    relative group overflow-hidden px-10 py-4 rounded-full font-semibold text-lg transition-all duration-300
+                    ${!file || isProcessing
+                      ? 'bg-secondary text-text-muted cursor-not-allowed border border-border'
+                      : 'bg-white text-primary hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.2)]'}
+                  `}
+                >
+                  {!file || isProcessing ? null : (
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out"></div>
+                  )}
+                  <span className="relative flex items-center gap-2">
+                    {isProcessing ? 'Processing...' : 'Translate Document'}
+                    {!isProcessing && <Sparkles className="w-5 h-5" />}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -86,16 +90,13 @@ function App() {
           
           <ResultPanel
             stats={stats}
-            onReset={() => {
-              setFile(null);
-              reset();
-            }} 
+            onReset={reset}
           />
 
         </main>
         
         <footer className="w-full text-center py-6 text-sm text-text-muted border-t border-border mt-auto">
-          Built for Google TMT Hackathon 2026 Track B2 · Fast, Layout-Preserving, Context-Aware
+          Kathmandu University · Google TMT Hackathon 2026 · Track B2
         </footer>
       </div>
     </div>

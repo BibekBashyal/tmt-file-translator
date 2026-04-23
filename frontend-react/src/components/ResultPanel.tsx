@@ -21,12 +21,12 @@ export function ResultPanel({ stats, onReset }: ResultPanelProps) {
         </div>
         
         <div className="flex gap-4">
-          <button 
+          <button
             onClick={onReset}
             className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium border border-border hover:bg-white/5 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Translate Another
+            Translate Again
           </button>
         </div>
       </div>
