@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "TMT API — lang-translate",
+    "description": "Postman collection for the KU TMT translation API.\n\nBase URL: https://tmt.ilprl.ku.edu.np\nAuth: Bearer token in Authorization header\n\nLanguage codes:\n- en  — English\n- ne  — Nepali\n- tmg — Tamang",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://tmt.ilprl.ku.edu.np",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "team_537a1c6fa1ae7e6f",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "English → Nepali",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Hello, how are you?\",\n  \"src_lang\": \"en\",\n  \"tgt_lang\": \"ne\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": "{\n  \"message_type\": \"SUCCESS\",\n  \"output\": \"नमस्ते, तपाईं कस्तो हुनुहुन्छ?\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Nepali → English",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"नमस्ते, तपाईंलाई कस्तो छ?\",\n  \"src_lang\": \"ne\",\n  \"tgt_lang\": \"en\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "English → Tamang",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Hello\",\n  \"src_lang\": \"en\",\n  \"tgt_lang\": \"tmg\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Tamang → Nepali",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"ग्यालो\",\n  \"src_lang\": \"tmg\",\n  \"tgt_lang\": \"ne\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Nepali → Tamang",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"नमस्ते\",\n  \"src_lang\": \"ne\",\n  \"tgt_lang\": \"tmg\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Tamang → English",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "inherit"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"ग्यालो\",\n  \"src_lang\": \"tmg\",\n  \"tgt_lang\": \"en\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/lang-translate",
+          "host": ["{{base_url}}"],
+          "path": ["lang-translate"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

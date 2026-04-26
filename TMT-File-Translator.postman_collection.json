@@ -1,0 +1,490 @@
+{
+  "info": {
+    "name": "TMT File Translator",
+    "description": "Complete API collection for the TMT File Translator microservice.\n\n**Services**\n- Orchestrator: http://localhost:8080\n- Doc Service (internal): http://localhost:8000\n\n**Language codes**\n- `en` — English\n- `ne` — Nepali\n- `tam` — Tamang",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "orchestrator_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "doc_service_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Orchestrator",
+      "description": "Main translation API running on port 8080",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/health",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Returns service health status."
+          },
+          "response": [
+            {
+              "name": "Healthy",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"orchestrator\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Supported Languages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate/languages",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate", "languages"]
+            },
+            "description": "Returns all valid source→target language pair combinations.\n\nSupported codes: `en`, `ne`, `tam`"
+          },
+          "response": [
+            {
+              "name": "Language pairs",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "[\n  {\"sourceCode\": \"en\", \"sourceName\": \"English\", \"targetCode\": \"ne\", \"targetName\": \"नेपाली (Nepali)\"},\n  {\"sourceCode\": \"en\", \"sourceName\": \"English\", \"targetCode\": \"tam\", \"targetName\": \"तामाङ (Tamang)\"},\n  {\"sourceCode\": \"ne\", \"sourceName\": \"नेपाली (Nepali)\", \"targetCode\": \"en\", \"targetName\": \"English\"},\n  {\"sourceCode\": \"ne\", \"sourceName\": \"नेपाली (Nepali)\", \"targetCode\": \"tam\", \"targetName\": \"तामाङ (Tamang)\"},\n  {\"sourceCode\": \"tam\", \"sourceName\": \"तामाङ (Tamang)\", \"targetCode\": \"en\", \"targetName\": \"English\"},\n  {\"sourceCode\": \"tam\", \"sourceName\": \"तामाङ (Tamang)\", \"targetCode\": \"ne\", \"targetName\": \"नेपाली (Nepali)\"}\n]"
+            }
+          ]
+        },
+        {
+          "name": "Translate File — CSV (en → ne)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "CSV file to translate (.csv)"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text",
+                  "description": "Source language code: en | ne | tam"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "ne",
+                  "type": "text",
+                  "description": "Target language code: en | ne | tam"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Translate a CSV file from English to Nepali.\n\nReturns the translated CSV file as a download.\n\n**Response headers of interest:**\n- `X-Segments-Count` — total text segments found\n- `X-Cache-Hits` — segments served from cache\n- `X-Api-Calls` — actual TMT API calls made\n- `X-Processing-Time-Ms` — total processing time\n- `Content-Disposition` — output filename"
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — DOCX (en → ne)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Word document to translate (.docx)"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "ne",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Translate a DOCX file. Formatting and layout are preserved in the output."
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — PDF (en → ne)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to translate (.pdf)"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "ne",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Translate a PDF file. Returns a PDF with translated text overlaid on original layout."
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — TSV (en → tam)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "TSV file to translate (.tsv)"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "tam",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Translate a TSV file from English to Tamang."
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — Error: unsupported type",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Upload a .txt or .xlsx to trigger the error"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "ne",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Expected 400: unsupported file type. Supported types are .pdf, .docx, .csv, .tsv only."
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — Error: same language",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Any supported file"
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "en",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Expected 400: source and target language must be different."
+          },
+          "response": []
+        },
+        {
+          "name": "Translate File — Error: invalid language code",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                },
+                {
+                  "key": "sourceLang",
+                  "value": "xx",
+                  "type": "text"
+                },
+                {
+                  "key": "targetLang",
+                  "value": "ne",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/v1/translate",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "v1", "translate"]
+            },
+            "description": "Expected 400: invalid language code. Valid codes: en, ne, tam."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Doc Service (internal)",
+      "description": "Python microservice on port 8000. Called internally by the orchestrator — useful for testing parsing/reconstruction directly.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{doc_service_url}}/health",
+              "host": ["{{doc_service_url}}"],
+              "path": ["health"]
+            },
+            "description": "Returns health status of the Python doc-service."
+          },
+          "response": [
+            {
+              "name": "Healthy",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"doc-service\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Extract Segments — CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "CSV file to parse"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{doc_service_url}}/extract",
+              "host": ["{{doc_service_url}}"],
+              "path": ["extract"]
+            },
+            "description": "Parse a CSV file and return text segments with positional metadata.\n\nEach segment includes:\n- `id` — unique identifier\n- `text` — the text content\n- `meta` — position info (row, col, etc.) used for reconstruction"
+          },
+          "response": [
+            {
+              "name": "Extracted segments",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"segments\": [\n    {\"id\": \"r1c0\", \"text\": \"Name\", \"meta\": {\"row\": 1, \"col\": 0, \"is_header\": true}},\n    {\"id\": \"r1c1\", \"text\": \"Age\",  \"meta\": {\"row\": 1, \"col\": 1, \"is_header\": true}},\n    {\"id\": \"r2c0\", \"text\": \"Alice\",\"meta\": {\"row\": 2, \"col\": 0, \"is_header\": false}}\n  ],\n  \"file_type\": \"csv\",\n  \"segment_count\": 3\n}"
+            }
+          ]
+        },
+        {
+          "name": "Extract Segments — DOCX",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "DOCX file to parse"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{doc_service_url}}/extract",
+              "host": ["{{doc_service_url}}"],
+              "path": ["extract"]
+            },
+            "description": "Parse a DOCX file and return text segments. Paragraph index and run index are stored in meta for layout-preserving reconstruction."
+          },
+          "response": []
+        },
+        {
+          "name": "Extract Segments — PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to parse"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{doc_service_url}}/extract",
+              "host": ["{{doc_service_url}}"],
+              "path": ["extract"]
+            },
+            "description": "Parse a PDF file and return text segments with page/block/line positional metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "Reconstruct File — CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Original CSV file (used as layout template)"
+                },
+                {
+                  "key": "segments",
+                  "value": "[{\"id\": \"r1c0\", \"text\": \"नाम\", \"meta\": {\"row\": 1, \"col\": 0, \"is_header\": true}}, {\"id\": \"r2c0\", \"text\": \"एलिस\", \"meta\": {\"row\": 2, \"col\": 0, \"is_header\": false}}]",
+                  "type": "text",
+                  "description": "JSON array of translated segments (same structure as /extract response)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{doc_service_url}}/reconstruct",
+              "host": ["{{doc_service_url}}"],
+              "path": ["reconstruct"]
+            },
+            "description": "Reconstruct a CSV from the original file + translated segments. Returns the translated CSV as a file download.\n\nThe `segments` field must be a JSON-stringified array from the /extract response, with `text` replaced with translated content."
+          },
+          "response": []
+        },
+        {
+          "name": "Reconstruct File — DOCX",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Original DOCX file"
+                },
+                {
+                  "key": "segments",
+                  "value": "[]",
+                  "type": "text",
+                  "description": "JSON array of translated segments"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{doc_service_url}}/reconstruct",
+              "host": ["{{doc_service_url}}"],
+              "path": ["reconstruct"]
+            },
+            "description": "Reconstruct a DOCX with translated text inserted into the original paragraph/run positions."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

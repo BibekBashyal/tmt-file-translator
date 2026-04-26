@@ -13,7 +13,7 @@ from app.models import Segment, SegmentMeta
 
 # Path to bundled Devanagari font
 FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fonts")
-DEVANAGARI_FONT_PATH = os.path.join(FONT_DIR, "NotoSansDevanagari-Regular.ttf")
+DEVANAGARI_FONT_PATH = os.path.join(FONT_DIR, "Noto_Sans_Devanagari", "static", "NotoSansDevanagari-Regular.ttf")
 
 
 def extract_pdf(file_bytes: bytes) -> List[Segment]:

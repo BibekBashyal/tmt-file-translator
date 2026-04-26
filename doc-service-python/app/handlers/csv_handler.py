@@ -87,4 +87,5 @@ def reconstruct_csv(
     writer = csv.writer(output, delimiter=delimiter, lineterminator="\n")
     writer.writerows(original_rows)
 
-    return output.getvalue().encode("utf-8")
+    # utf-8-sig writes the UTF-8 BOM so Excel opens with correct encoding
+    return output.getvalue().encode("utf-8-sig")

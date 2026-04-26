@@ -18,9 +18,10 @@ app:
   doc-service-url: ${APP_DOC_SERVICE_URL:http://localhost:8000}
   tmt-api:
     mock: ${APP_TMT_API_MOCK:true}
-    url: ${APP_TMT_API_URL:https://tmt-api.example.com/translate}
-    batch-size: 25
-    max-chars-per-batch: 5000
+    url: ${APP_TMT_API_URL:https://tmt.ilprl.ku.edu.np/lang-translate}
+    key: ${APP_TMT_API_KEY:}
+    batch-size: 100
+    max-chars-per-batch: 20000
     retry:
       max-attempts: 3
       initial-delay-ms: 200
