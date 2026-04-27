@@ -21,9 +21,9 @@ public class RealTmtApiClient implements TmtApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(RealTmtApiClient.class);
 
-    // Only 1 request at a time — fully serialized
+    // Fully serialized — one request at a time to stay under the API rate limit
     private static final int MAX_CONCURRENT = 1;
-    // Pause between every successful request
+    // Pause between requests to avoid triggering quota
     private static final long REQUEST_COOLDOWN_MS = 1_000;
     // When ANY thread hits 429, ALL threads pause for this long (quota window reset)
     private static final long GLOBAL_BACKOFF_MS = 65_000;
@@ -57,7 +57,7 @@ public class RealTmtApiClient implements TmtApiClient {
             .exchangeStrategies(strategies)
             .build();
 
-        log.info("RealTmtApiClient initialized: url={}", tmtApiUrl);
+        log.info("RealTmtApiClient initialized: url={} concurrent={}", tmtApiUrl, MAX_CONCURRENT);
     }
 
     @Override
@@ -67,11 +67,8 @@ public class RealTmtApiClient implements TmtApiClient {
         String srcCode = LANG_CODE_MAP.getOrDefault(sourceLang, sourceLang);
         String tgtCode = LANG_CODE_MAP.getOrDefault(targetLang, targetLang);
 
-        // Translate each sentence individually. The TMT API treats its entire
-        // input as one block — joining multiple sentences with \n causes it to
-        // merge them or hallucinate. One call per sentence is the only reliable
-        // approach; with sentence-level extraction (~40 segments) this is fast.
-        log.info("TMT BATCH START segments={} src={} tgt={}", texts.size(), srcCode, tgtCode);
+        log.info("TMT BATCH START segments={} concurrent={} src={} tgt={}",
+            texts.size(), MAX_CONCURRENT, srcCode, tgtCode);
 
         List<String> results = new ArrayList<>(texts.size());
         for (String text : texts) {
@@ -146,9 +143,6 @@ public class RealTmtApiClient implements TmtApiClient {
                 log.error("TMT API HTTP {} [attempt={}/{}] src={} tgt={}: {}",
                     ex.getStatusCode().value(), attempt, MAX_RETRIES, srcLang, tgtLang, ex.getMessage());
                 if (ex.getStatusCode().value() == 429 && attempt < MAX_RETRIES) {
-                    // Trigger global backoff so ALL threads pause, not just this one.
-                    // This prevents the other 28 threads from burning through retries
-                    // while the quota window hasn't reset yet.
                     triggerGlobalBackoff();
                     shouldRetry = true;
                 } else {
@@ -164,7 +158,6 @@ public class RealTmtApiClient implements TmtApiClient {
             }
 
             if (shouldRetry) {
-                // Additional per-attempt delay on top of the global backoff
                 sleep(retryDelay);
                 retryDelay = Math.min(retryDelay * 2, 16_000);
             }
