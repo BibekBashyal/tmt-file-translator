@@ -173,10 +173,11 @@ function PdfPreview({ file }: { file: File }) {
 
 function DocxPreview({ file, onFileUpdate }: { file: File; onFileUpdate?: (f: File) => void }) {
   const [html, setHtml] = useState('');
-  const [editText, setEditText] = useState('');
   const [plainText, setPlainText] = useState('');
+  const [editText, setEditText] = useState('');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,11 +208,24 @@ function DocxPreview({ file, onFileUpdate }: { file: File; onFileUpdate?: (f: Fi
     return () => { cancelled = true; };
   }, [file]);
 
-  const saveEdit = () => {
-    const blob = new Blob([editText], { type: 'text/plain' });
-    const newFile = new File([blob], file.name.replace('.docx', '.txt'), { type: 'text/plain' });
-    setIsEditing(false);
-    onFileUpdate?.(newFile);
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      const { Document, Packer, Paragraph, TextRun } = await import('docx');
+      const paragraphs = editText.split('\n').map(
+        (line) => new Paragraph({ children: [new TextRun(line)] })
+      );
+      const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
+      const blob = await Packer.toBlob(doc);
+      const newFile = new File([blob], file.name, {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      setPlainText(editText);
+      setIsEditing(false);
+      onFileUpdate?.(newFile);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cancelEdit = () => {
@@ -223,7 +237,7 @@ function DocxPreview({ file, onFileUpdate }: { file: File; onFileUpdate?: (f: Fi
     <div className="glass-panel rounded-2xl overflow-hidden animate-fade-in">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <p className="text-xs text-text-muted">
-          {isEditing ? 'Editing text content (saves as .txt)' : 'Preview'}
+          {isEditing ? 'Editing text content' : 'Preview'}
         </p>
         <div className="flex gap-2">
           {!isEditing && !loading && onFileUpdate && (
@@ -231,16 +245,24 @@ function DocxPreview({ file, onFileUpdate }: { file: File; onFileUpdate?: (f: Fi
               onClick={() => setIsEditing(true)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-blue/15 border border-accent-blue/30 text-accent-blue hover:bg-accent-blue/25 transition-colors"
             >
-              <Pencil className="w-3 h-3" /> Edit Text
+              <Pencil className="w-3 h-3" /> Edit
             </button>
           )}
           {isEditing && (
             <>
-              <button onClick={cancelEdit} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/5 border border-border text-text-muted hover:bg-white/10 transition-colors">
+              <button
+                onClick={cancelEdit}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/5 border border-border text-text-muted hover:bg-white/10 transition-colors"
+              >
                 <X className="w-3 h-3" /> Cancel
               </button>
-              <button onClick={saveEdit} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-blue/20 border border-accent-blue/40 text-accent-blue hover:bg-accent-blue/30 transition-colors">
-                <Save className="w-3 h-3" /> Save as .txt
+              <button
+                onClick={saveEdit}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-blue/20 border border-accent-blue/40 text-accent-blue hover:bg-accent-blue/30 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-3 h-3" />
+                {saving ? 'Saving…' : 'Save Changes'}
               </button>
             </>
           )}
@@ -252,7 +274,7 @@ function DocxPreview({ file, onFileUpdate }: { file: File; onFileUpdate?: (f: Fi
         {!loading && isEditing && (
           <textarea
             value={editText}
-            onChange={e => setEditText(e.target.value)}
+            onChange={(e) => setEditText(e.target.value)}
             className="w-full h-40 bg-secondary border border-border rounded-lg p-3 text-sm text-text-main outline-none focus:border-accent-blue resize-none leading-relaxed"
           />
         )}

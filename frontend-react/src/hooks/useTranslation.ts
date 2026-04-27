@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { LanguageCode, TranslationProgress, TranslationState, TranslationStats } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
@@ -10,6 +10,7 @@ export function useTranslation() {
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [backoffUntil, setBackoffUntil] = useState<number | null>(null);
   const [resultFilename, setResultFilename] = useState<string>('');
+  const abortRef = useRef<AbortController | null>(null);
 
   const translateFile = async (
     file: File,
@@ -22,6 +23,9 @@ export function useTranslation() {
     setProgress(null);
     setBackoffUntil(null);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('sourceLang', sourceLang);
@@ -31,6 +35,7 @@ export function useTranslation() {
       const response = await fetch(`${API_BASE_URL}/translate/stream`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -95,9 +100,23 @@ export function useTranslation() {
         }
       }
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setState('idle');
+        return;
+      }
       setState('error');
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     }
+  };
+
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setState('idle');
+    setError(null);
+    setStats(null);
+    setProgress(null);
+    setBackoffUntil(null);
   };
 
   const reset = () => {
@@ -108,5 +127,5 @@ export function useTranslation() {
     setBackoffUntil(null);
   };
 
-  return { state, error, stats, progress, backoffUntil, resultFilename, translateFile, reset };
+  return { state, error, stats, progress, backoffUntil, resultFilename, translateFile, cancel, reset };
 }

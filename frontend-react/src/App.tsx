@@ -13,7 +13,7 @@ function App() {
   const [sourceLang, setSourceLang] = useState<LanguageCode>('en');
   const [targetLang, setTargetLang] = useState<LanguageCode>('ne');
   
-  const { state, error, stats, progress, backoffUntil, translateFile, reset } = useTranslation();
+  const { state, error, stats, progress, backoffUntil, translateFile, cancel, reset } = useTranslation();
 
   const isProcessing = state === 'uploading' || state === 'translating';
 
@@ -86,7 +86,7 @@ function App() {
           </div>
 
           {/* Dynamic Sections */}
-          <ProgressTracker state={state} error={error} progress={progress} backoffUntil={backoffUntil} />
+          <ProgressTracker state={state} error={error} progress={progress} backoffUntil={backoffUntil} onCancel={cancel} />
           
           <ResultPanel
             stats={stats}

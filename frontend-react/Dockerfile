@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm install
+RUN npm ci --prefer-offline 2>/dev/null || npm install
 
 # Copy source code
 COPY . .

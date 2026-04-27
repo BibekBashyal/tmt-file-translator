@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, FileDown, ShieldAlert, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Loader2, FileDown, ShieldAlert, Clock, AlertTriangle, X } from 'lucide-react';
 import { TranslationProgress, TranslationState } from '../types';
 
 interface ProgressTrackerProps {
@@ -7,6 +7,7 @@ interface ProgressTrackerProps {
   error: string | null;
   progress: TranslationProgress | null;
   backoffUntil: number | null;
+  onCancel?: () => void;
 }
 
 function formatEta(seconds: number): string {
@@ -17,7 +18,7 @@ function formatEta(seconds: number): string {
   return s === 0 ? `~${m}m remaining` : `~${m}m ${s}s remaining`;
 }
 
-export function ProgressTracker({ state, error, progress, backoffUntil }: ProgressTrackerProps) {
+export function ProgressTracker({ state, error, progress, backoffUntil, onCancel }: ProgressTrackerProps) {
   const startTimeRef = useRef<number | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
 
@@ -149,19 +150,33 @@ export function ProgressTracker({ state, error, progress, backoffUntil }: Progre
           })}
         </div>
 
-        {/* Bottom info row: rate-limit countdown takes priority over ETA */}
+        {/* Bottom row: status info + cancel button */}
         {state === 'translating' && (
-          countdown !== null ? (
-            <div className="flex items-center gap-2 text-xs text-amber-400 border-t border-border pt-4">
-              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>API rate limited — retrying in {countdown}s</span>
-            </div>
-          ) : eta !== null ? (
-            <div className="flex items-center gap-2 text-xs text-text-muted border-t border-border pt-4">
-              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{formatEta(eta)}</span>
-            </div>
-          ) : null
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            {countdown !== null ? (
+              <div className="flex items-center gap-2 text-xs text-amber-400">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>API rate limited — retrying in {countdown}s</span>
+              </div>
+            ) : eta !== null ? (
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{formatEta(eta)}</span>
+              </div>
+            ) : (
+              <span />
+            )}
+
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-muted border border-border hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/5 transition-all duration-200"
+              >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

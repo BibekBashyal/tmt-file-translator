@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import List
@@ -205,54 +206,64 @@ async def translate_stream(
     total = len(segments)
     loop = asyncio.get_event_loop()
     queue: asyncio.Queue = asyncio.Queue()
+    cancel_event = threading.Event()
 
     async def generate():
-        yield f"data: {json.dumps({'type': 'extracted', 'total': total})}\n\n"
+        try:
+            yield f"data: {json.dumps({'type': 'extracted', 'total': total})}\n\n"
 
-        t0 = time.monotonic()
+            t0 = time.monotonic()
 
-        def on_progress(current: int, _total: int) -> None:
-            loop.call_soon_threadsafe(
-                queue.put_nowait, {"type": "segment", "current": current, "total": _total}
-            )
-
-        def on_backoff(seconds: float) -> None:
-            loop.call_soon_threadsafe(
-                queue.put_nowait, {"type": "backoff", "seconds": int(seconds)}
-            )
-
-        def run_translation() -> None:
-            try:
-                result = translate_segments(segments, sourceLang, targetLang, on_progress, on_backoff)
-                output_bytes = _reconstruct(file_bytes, result.segments, filename, ext)
-                elapsed_ms = int((time.monotonic() - t0) * 1000)
-                name_stem = filename.rsplit(".", 1)[0]
-                output_filename = f"{name_stem}_translated{ext}"
-                loop.call_soon_threadsafe(queue.put_nowait, {
-                    "type": "done",
-                    "filename": output_filename,
-                    "file": base64.b64encode(output_bytes).decode(),
-                    "mediaType": CONTENT_TYPES.get(ext, "application/octet-stream"),
-                    "segmentCount": total,
-                    "cacheHits": result.cache_hits,
-                    "apiCalls": result.api_calls,
-                    "processingTimeMs": elapsed_ms,
-                })
-            except Exception as e:
-                logger.error("Stream translation failed: %s", e, exc_info=True)
+            def on_progress(current: int, _total: int) -> None:
                 loop.call_soon_threadsafe(
-                    queue.put_nowait, {"type": "error", "message": str(e)}
+                    queue.put_nowait, {"type": "segment", "current": current, "total": _total}
                 )
 
-        fut = loop.run_in_executor(None, run_translation)
+            def on_backoff(seconds: float) -> None:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"type": "backoff", "seconds": int(seconds)}
+                )
 
-        while True:
-            event = await queue.get()
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            if event["type"] in ("done", "error"):
-                break
+            def run_translation() -> None:
+                try:
+                    result = translate_segments(
+                        segments, sourceLang, targetLang, on_progress, on_backoff, cancel_event
+                    )
+                    output_bytes = _reconstruct(file_bytes, result.segments, filename, ext)
+                    elapsed_ms = int((time.monotonic() - t0) * 1000)
+                    name_stem = filename.rsplit(".", 1)[0]
+                    output_filename = f"{name_stem}_translated{ext}"
+                    loop.call_soon_threadsafe(queue.put_nowait, {
+                        "type": "done",
+                        "filename": output_filename,
+                        "file": base64.b64encode(output_bytes).decode(),
+                        "mediaType": CONTENT_TYPES.get(ext, "application/octet-stream"),
+                        "segmentCount": total,
+                        "cacheHits": result.cache_hits,
+                        "apiCalls": result.api_calls,
+                        "processingTimeMs": elapsed_ms,
+                    })
+                except InterruptedError:
+                    logger.info("Translation cancelled by client")
+                except Exception as e:
+                    logger.error("Stream translation failed: %s", e, exc_info=True)
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait, {"type": "error", "message": str(e)}
+                    )
 
-        await fut
+            fut = loop.run_in_executor(None, run_translation)
+
+            while True:
+                event = await queue.get()
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                if event["type"] in ("done", "error"):
+                    break
+
+            await fut
+
+        except GeneratorExit:
+            cancel_event.set()
+            logger.info("Client disconnected — translation cancelled")
 
     return StreamingResponse(
         generate(),

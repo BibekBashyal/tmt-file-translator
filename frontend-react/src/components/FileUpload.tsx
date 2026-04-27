@@ -26,8 +26,8 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
       return false;
     }
     
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError('File too large. Maximum size is 10MB.');
+    if (selectedFile.size > 1 * 1024 * 1024) {
+      setError('File too large. Maximum size is 1MB.');
       return false;
     }
     
@@ -106,8 +106,23 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
           </div>
         </div>
 
+        {/* Validation error (shown here when file is already accepted, e.g. after preview edit) */}
+        {error && (
+          <div className="flex items-center space-x-2 text-red-400 bg-red-400/10 p-3 rounded-lg border border-red-400/20 animate-fade-in">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+
         {/* Inline preview panel */}
-        {showPreview && <FilePreview file={file} onFileUpdate={setFile} />}
+        {showPreview && (
+          <FilePreview
+            file={file}
+            onFileUpdate={(updated) => {
+              if (validateFile(updated)) setFile(updated);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -130,7 +145,7 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
           <p className="mb-2 text-sm text-text-main">
             <span className="font-semibold text-accent-blue">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-text-muted">PDF, DOCX, CSV, TSV (Max. 10MB)</p>
+          <p className="text-xs text-text-muted">PDF, DOCX, CSV, TSV (Max. 1MB)</p>
         </div>
         <input
           ref={inputRef}

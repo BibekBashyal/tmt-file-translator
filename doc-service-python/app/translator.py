@@ -5,6 +5,7 @@ Cache is persisted to disk so warm runs skip API calls entirely.
 
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
@@ -57,6 +58,7 @@ def translate_segments(
     segments: List[Segment], src_lang: str, tgt_lang: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
     on_backoff: Optional[Callable[[float], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> TranslationResult:
     if not segments:
         return TranslationResult(segments=[], cache_hits=0, api_calls=0)
@@ -99,6 +101,8 @@ def translate_segments(
     total = len(segments)
 
     for original in unique_texts:
+        if cancel_event and cancel_event.is_set():
+            raise InterruptedError("Translation cancelled by client")
         translated = translate_one(original, src_lang, tgt_lang, on_backoff=on_backoff)
         _persist(_key(original, src_lang, tgt_lang), translated)
         for seg in by_text[original]:
