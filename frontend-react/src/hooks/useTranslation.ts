@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import axios from 'axios';
-import { LanguageCode, TranslationState, TranslationStats } from '../types';
+import { LanguageCode, TranslationProgress, TranslationState, TranslationStats } from '../types';
 
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 export function useTranslation() {
   const [state, setState] = useState<TranslationState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<TranslationStats | null>(null);
+  const [progress, setProgress] = useState<TranslationProgress | null>(null);
+  const [backoffUntil, setBackoffUntil] = useState<number | null>(null);
   const [resultFilename, setResultFilename] = useState<string>('');
 
   const translateFile = async (
@@ -18,6 +19,8 @@ export function useTranslation() {
     setState('uploading');
     setError(null);
     setStats(null);
+    setProgress(null);
+    setBackoffUntil(null);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -25,62 +28,75 @@ export function useTranslation() {
     formData.append('targetLang', targetLang);
 
     try {
-      // Simulate progress stages for better UX
-      setTimeout(() => { if (state === 'uploading') setState('processing'); }, 1500);
-
-      const response = await axios.post(`${API_BASE_URL}/translate`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        responseType: 'blob', // Important for file download
+      const response = await fetch(`${API_BASE_URL}/translate/stream`, {
+        method: 'POST',
+        body: formData,
       });
 
-      setState('done');
-
-      // Extract stats from headers
-      const headers = response.headers;
-      setStats({
-        segmentCount: parseInt(headers['x-segments-count'] || '0', 10),
-        cacheHits: parseInt(headers['x-cache-hits'] || '0', 10),
-        apiCalls: parseInt(headers['x-api-calls'] || '0', 10),
-        processingTimeMs: parseInt(headers['x-processing-time-ms'] || '0', 10),
-      });
-
-      // Extract filename from Content-Disposition
-      const contentDisposition = headers['content-disposition'];
-      let filename = `translated_${file.name}`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch && filenameMatch.length === 2) {
-          filename = filenameMatch[1];
-        }
-      }
-      setResultFilename(filename);
-
-      // Auto-trigger download
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-    } catch (err: any) {
-      setState('error');
-      if (err.response && err.response.data instanceof Blob) {
-        // Parse blob error response
-        const text = await err.response.data.text();
+      if (!response.ok || !response.body) {
+        const text = await response.text();
         try {
-            const json = JSON.parse(text);
-            setError(json.message || 'Translation failed');
-        } catch(e) {
-            setError(text || 'Translation failed');
+          const json = JSON.parse(text);
+          throw new Error(json.detail || json.message || 'Translation failed');
+        } catch {
+          throw new Error(text || 'Translation failed');
         }
-      } else {
-        setError(err.message || 'An unexpected error occurred');
       }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          const event = JSON.parse(part.slice(6));
+
+          if (event.type === 'extracted') {
+            setState('translating');
+            setProgress({ current: 0, total: event.total });
+          } else if (event.type === 'segment') {
+            setBackoffUntil(null);
+            setProgress({ current: event.current, total: event.total });
+          } else if (event.type === 'backoff') {
+            setBackoffUntil(Date.now() + event.seconds * 1000);
+          } else if (event.type === 'done') {
+            setBackoffUntil(null);
+            setStats({
+              segmentCount: event.segmentCount,
+              cacheHits: event.cacheHits,
+              apiCalls: event.apiCalls,
+              processingTimeMs: event.processingTimeMs,
+            });
+            setResultFilename(event.filename);
+
+            const bytes = Uint8Array.from(atob(event.file), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: event.mediaType });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', event.filename);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode?.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setState('done');
+          } else if (event.type === 'error') {
+            throw new Error(event.message);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      setState('error');
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     }
   };
 
@@ -88,7 +104,9 @@ export function useTranslation() {
     setState('idle');
     setError(null);
     setStats(null);
+    setProgress(null);
+    setBackoffUntil(null);
   };
 
-  return { state, error, stats, resultFilename, translateFile, reset };
+  return { state, error, stats, progress, backoffUntil, resultFilename, translateFile, reset };
 }

@@ -1,5 +1,6 @@
 package com.tmt.orchestrator.client;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -9,6 +10,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,25 +25,22 @@ public class RealTmtApiClient implements TmtApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(RealTmtApiClient.class);
 
-    // Fully serialized — one request at a time to stay under the API rate limit
-    private static final int MAX_CONCURRENT = 1;
-    // Pause between requests to avoid triggering quota
-    private static final long REQUEST_COOLDOWN_MS = 1_000;
-    // When ANY thread hits 429, ALL threads pause for this long (quota window reset)
-    private static final long GLOBAL_BACKOFF_MS = 65_000;
-    // Per-request retry backoff (doubles each attempt, capped at 16 s)
+    private static final int  MAX_CONCURRENT      = 1;
+    private static final long GLOBAL_BACKOFF_MS   = 65_000;
     private static final long RETRY_BASE_DELAY_MS = 2_000;
-    private static final int  MAX_RETRIES = 5;
+    private static final int  MAX_RETRIES         = 5;
+
+    // Calibrated at startup; falls back to 1000 ms if calibration is skipped
+    private volatile long cooldownMs = 1_000;
+
+    private static final Path CALIBRATION_FILE = Path.of(".tmt-cooldown");
 
     private static final Map<String, String> LANG_CODE_MAP = Map.of(
-        "tam", "tmg"   // Tamang: internal code → API code
+        "tam", "tmg"
     );
 
     private final WebClient webClient;
     private final Semaphore semaphore = new Semaphore(MAX_CONCURRENT);
-
-    // Epoch-ms timestamp before which NO request should fire.
-    // Set by whichever thread first hits 429, read by all threads.
     private final AtomicLong globalResumeAt = new AtomicLong(0);
 
     public RealTmtApiClient(
@@ -60,6 +61,64 @@ public class RealTmtApiClient implements TmtApiClient {
         log.info("RealTmtApiClient initialized: url={} concurrent={}", tmtApiUrl, MAX_CONCURRENT);
     }
 
+    // ── Calibration ──────────────────────────────────────────────────────────
+
+    @PostConstruct
+    private void calibrate() {
+        if (Files.exists(CALIBRATION_FILE)) {
+            try {
+                long stored = Long.parseLong(Files.readString(CALIBRATION_FILE).trim());
+                if (stored > 0) {
+                    cooldownMs = stored;
+                    log.info("Loaded calibrated cooldown: {}ms", cooldownMs);
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        log.info("Calibrating request cooldown — probing safe intervals (runs once, then persisted)");
+
+        // Probe from conservative → aggressive. Stop as soon as a level fails.
+        long[] intervals = {500, 300, 200, 150};
+        long lastSafe = 1_000;
+
+        for (long interval : intervals) {
+            log.info("  Probing {}ms × 5 requests...", interval);
+            if (runProbe(interval, 5)) {
+                lastSafe = interval;
+                log.info("  {}ms: OK", interval);
+            } else {
+                log.info("  {}ms: 429 — stopping probe, waiting for quota reset", interval);
+                sleep(GLOBAL_BACKOFF_MS);
+                break;
+            }
+        }
+
+        cooldownMs = lastSafe * 2;
+        log.info("Calibration complete: safe={}ms  cooldown={}ms (2× margin)", lastSafe, cooldownMs);
+
+        try {
+            Files.writeString(CALIBRATION_FILE, String.valueOf(cooldownMs));
+        } catch (IOException e) {
+            log.warn("Could not persist cooldown: {}", e.getMessage());
+        }
+    }
+
+    private boolean runProbe(long intervalMs, int count) {
+        Map<String, String> body = Map.of("text", "Hello", "src_lang", "en", "tgt_lang", "ne");
+        for (int i = 0; i < count; i++) {
+            try {
+                webClient.post().bodyValue(body).retrieve().bodyToMono(Map.class).block();
+                sleep(intervalMs);
+            } catch (WebClientResponseException ex) {
+                if (ex.getStatusCode().value() == 429) return false;
+            } catch (Exception ignored) {}
+        }
+        return true;
+    }
+
+    // ── Translation ───────────────────────────────────────────────────────────
+
     @Override
     public List<String> translate(List<String> texts, String sourceLang, String targetLang) {
         if (texts.isEmpty()) return texts;
@@ -67,8 +126,8 @@ public class RealTmtApiClient implements TmtApiClient {
         String srcCode = LANG_CODE_MAP.getOrDefault(sourceLang, sourceLang);
         String tgtCode = LANG_CODE_MAP.getOrDefault(targetLang, targetLang);
 
-        log.info("TMT BATCH START segments={} concurrent={} src={} tgt={}",
-            texts.size(), MAX_CONCURRENT, srcCode, tgtCode);
+        log.info("TMT BATCH START segments={} concurrent={} cooldownMs={} src={} tgt={}",
+            texts.size(), MAX_CONCURRENT, cooldownMs, srcCode, tgtCode);
 
         List<String> results = new ArrayList<>(texts.size());
         for (String text : texts) {
@@ -83,16 +142,10 @@ public class RealTmtApiClient implements TmtApiClient {
         long retryDelay = RETRY_BASE_DELAY_MS;
 
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            // Acquire the semaphore only when no global backoff is active.
-            // Must recheck AFTER acquiring because another thread may have
-            // triggered backoff while we were queued waiting for the permit.
             while (true) {
                 awaitGlobalResume();
                 semaphore.acquireUninterruptibly();
-                if (System.currentTimeMillis() >= globalResumeAt.get()) {
-                    break; // clean window — safe to fire
-                }
-                // Backoff was set while we waited in the semaphore queue — release and re-wait
+                if (System.currentTimeMillis() >= globalResumeAt.get()) break;
                 semaphore.release();
             }
 
@@ -153,7 +206,7 @@ public class RealTmtApiClient implements TmtApiClient {
                     attempt, MAX_RETRIES, srcLang, tgtLang, ex.getMessage());
                 return text;
             } finally {
-                sleep(REQUEST_COOLDOWN_MS);
+                sleep(cooldownMs);
                 semaphore.release();
             }
 
@@ -167,22 +220,19 @@ public class RealTmtApiClient implements TmtApiClient {
         return text;
     }
 
-    /** Block the calling thread until the global resume timestamp has passed. */
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     private void awaitGlobalResume() {
         long resumeAt = globalResumeAt.get();
         long now = System.currentTimeMillis();
         if (now >= resumeAt) return;
-
         long waitMs = resumeAt - now;
-        log.info("Global quota backoff active — waiting {}s before next request",
-            waitMs / 1_000);
+        log.info("Global quota backoff active — waiting {}s", waitMs / 1_000);
         sleep(waitMs);
     }
 
-    /** Called by the first thread to receive 429 — pauses ALL subsequent requests. */
     private void triggerGlobalBackoff() {
         long resumeAt = System.currentTimeMillis() + GLOBAL_BACKOFF_MS;
-        // Only extend the window, never shorten it (another thread may have set it later)
         globalResumeAt.updateAndGet(current -> Math.max(current, resumeAt));
         log.warn("429 received — global backoff triggered, all threads pause for {}s",
             GLOBAL_BACKOFF_MS / 1_000);

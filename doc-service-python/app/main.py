@@ -1,184 +1,321 @@
 """
 TMT Document Service — FastAPI Application
-
-Stateless microservice for document parsing and reconstruction.
-Two core endpoints: /extract and /reconstruct
 """
 
-import io
+import asyncio
+import base64
 import json
 import logging
+import time
+from contextlib import asynccontextmanager
 from typing import List
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from app.models import Segment, ExtractResponse
 from app.handlers.csv_handler import extract_csv, reconstruct_csv
 from app.handlers.docx_handler import extract_docx, reconstruct_docx
 from app.handlers.pdf_handler import extract_pdf, reconstruct_pdf
+from app.translator import translate_segments, load_cache
+from app import tmt_client
 
-# ── Logging ──
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── App ──
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".csv", ".tsv"}
+MAX_FILE_SIZE = 1 * 1024 * 1024  # 1MB
+
+CONTENT_TYPES = {
+    ".pdf":  "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".csv":  "text/csv",
+    ".tsv":  "text/tab-separated-values",
+}
+
+EXPOSE_HEADERS = [
+    "X-Segments-Count", "X-Cache-Hits", "X-Api-Calls",
+    "X-Processing-Time-Ms", "Content-Disposition",
+]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Run blocking calibration in a thread so the event loop isn't blocked
+    await asyncio.get_event_loop().run_in_executor(None, load_cache)
+    await asyncio.get_event_loop().run_in_executor(None, tmt_client.calibrate)
+    yield
+
+
 app = FastAPI(
-    title="TMT Document Service",
-    description="Stateless document parsing and reconstruction service for the TMT File Translator",
-    version="1.0.0",
+    title="TMT Translation Service",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
-# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=EXPOSE_HEADERS,
 )
 
-# ── Supported file types ──
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".csv", ".tsv"}
-MAX_FILE_SIZE = 1 * 1024 * 1024  # 1MB
+
+def _ext(filename: str) -> str:
+    return ("." + filename.rsplit(".", 1)[1].lower()) if "." in filename else ""
 
 
-def _get_extension(filename: str) -> str:
-    """Extract lowercase file extension."""
-    if "." in filename:
-        return "." + filename.rsplit(".", 1)[1].lower()
-    return ""
+def _extract(file_bytes: bytes, filename: str, ext: str) -> tuple[List[Segment], str]:
+    if ext == ".pdf":
+        return extract_pdf(file_bytes), "pdf"
+    if ext == ".docx":
+        return extract_docx(file_bytes), "docx"
+    if ext in (".csv", ".tsv"):
+        return extract_csv(file_bytes, filename), "csv" if ext == ".csv" else "tsv"
+    raise HTTPException(status_code=400, detail=f"Unsupported: {ext}")
 
 
-# ── Health Check ──
+def _reconstruct(file_bytes: bytes, segments: List[Segment], filename: str, ext: str) -> bytes:
+    if ext == ".pdf":
+        return reconstruct_pdf(file_bytes, segments)
+    if ext == ".docx":
+        return reconstruct_docx(file_bytes, segments)
+    if ext in (".csv", ".tsv"):
+        return reconstruct_csv(file_bytes, segments, filename)
+    raise HTTPException(status_code=400, detail=f"Unsupported: {ext}")
+
+
+# ── Health ────────────────────────────────────────────────────────────────────
+
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "doc-service"}
 
 
-# ── Extract Endpoint ──
-@app.post("/extract", response_model=ExtractResponse)
-async def extract(file: UploadFile = File(...)):
-    """
-    Parse a document and return text segments with positional/style metadata.
-    
-    Supported formats: .pdf, .docx, .csv, .tsv
-    Max file size: 1MB
-    """
-    # Validate extension
-    ext = _get_extension(file.filename or "")
-    if ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {ext}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}",
-        )
+# ── Translate (full pipeline) ─────────────────────────────────────────────────
 
-    # Read and validate size
+@app.post("/api/v1/translate")
+async def translate(
+    file: UploadFile = File(...),
+    sourceLang: str = Form(default="en"),
+    targetLang: str = Form(...),
+):
+    filename = file.filename or "upload"
+    ext = _ext(filename)
+
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}")
+
     file_bytes = await file.read()
     if len(file_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large ({len(file_bytes)} bytes). Max: {MAX_FILE_SIZE} bytes (1MB)",
-        )
+        raise HTTPException(400, f"File too large ({len(file_bytes)} bytes). Max: 1MB")
 
-    logger.info(f"Extracting from {file.filename} ({len(file_bytes)} bytes, type: {ext})")
+    if sourceLang == targetLang:
+        raise HTTPException(400, "Source and target language must be different")
+
+    logger.info("Translate request: %s (%d bytes) %s→%s",
+                filename, len(file_bytes), sourceLang, targetLang)
+
+    t0 = time.monotonic()
 
     try:
-        if ext == ".pdf":
-            segments = extract_pdf(file_bytes)
-            file_type = "pdf"
-        elif ext == ".docx":
-            segments = extract_docx(file_bytes)
-            file_type = "docx"
-        elif ext in (".csv", ".tsv"):
-            segments = extract_csv(file_bytes, file.filename or "file.csv")
-            file_type = "csv" if ext == ".csv" else "tsv"
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported: {ext}")
+        segments, _ = await asyncio.get_event_loop().run_in_executor(
+            None, _extract, file_bytes, filename, ext
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Extraction failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+        logger.error("Extraction failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Extraction failed: {e}")
 
-    logger.info(f"Extracted {len(segments)} segments from {file.filename}")
+    logger.info("Extracted %d segments", len(segments))
 
-    return ExtractResponse(
-        segments=segments,
-        file_type=file_type,
-        segment_count=len(segments),
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, translate_segments, segments, sourceLang, targetLang
+        )
+    except Exception as e:
+        logger.error("Translation failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Translation failed: {e}")
+
+    try:
+        output_bytes = await asyncio.get_event_loop().run_in_executor(
+            None, _reconstruct, file_bytes, result.segments, filename, ext
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Reconstruction failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Reconstruction failed: {e}")
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    name_stem = filename.rsplit(".", 1)[0]
+    output_filename = f"{name_stem}_translated{ext}"
+
+    logger.info("Done in %dms: %d segments, %d cache hits, %d API calls",
+                elapsed_ms, len(segments), result.cache_hits, result.api_calls)
+
+    return Response(
+        content=output_bytes,
+        media_type=CONTENT_TYPES.get(ext, "application/octet-stream"),
+        headers={
+            "Content-Disposition": f'attachment; filename="{output_filename}"',
+            "X-Segments-Count":     str(len(segments)),
+            "X-Cache-Hits":         str(result.cache_hits),
+            "X-Api-Calls":          str(result.api_calls),
+            "X-Processing-Time-Ms": str(elapsed_ms),
+        },
     )
 
 
-# ── Reconstruct Endpoint ──
+# ── Translate stream (SSE) ───────────────────────────────────────────────────
+
+@app.post("/api/v1/translate/stream")
+async def translate_stream(
+    file: UploadFile = File(...),
+    sourceLang: str = Form(default="en"),
+    targetLang: str = Form(...),
+):
+    filename = file.filename or "upload"
+    ext = _ext(filename)
+
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"File too large ({len(file_bytes)} bytes). Max: 1MB")
+
+    if sourceLang == targetLang:
+        raise HTTPException(400, "Source and target language must be different")
+
+    try:
+        segments, _ = await asyncio.get_event_loop().run_in_executor(
+            None, _extract, file_bytes, filename, ext
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Extraction failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Extraction failed: {e}")
+
+    total = len(segments)
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def generate():
+        yield f"data: {json.dumps({'type': 'extracted', 'total': total})}\n\n"
+
+        t0 = time.monotonic()
+
+        def on_progress(current: int, _total: int) -> None:
+            loop.call_soon_threadsafe(
+                queue.put_nowait, {"type": "segment", "current": current, "total": _total}
+            )
+
+        def on_backoff(seconds: float) -> None:
+            loop.call_soon_threadsafe(
+                queue.put_nowait, {"type": "backoff", "seconds": int(seconds)}
+            )
+
+        def run_translation() -> None:
+            try:
+                result = translate_segments(segments, sourceLang, targetLang, on_progress, on_backoff)
+                output_bytes = _reconstruct(file_bytes, result.segments, filename, ext)
+                elapsed_ms = int((time.monotonic() - t0) * 1000)
+                name_stem = filename.rsplit(".", 1)[0]
+                output_filename = f"{name_stem}_translated{ext}"
+                loop.call_soon_threadsafe(queue.put_nowait, {
+                    "type": "done",
+                    "filename": output_filename,
+                    "file": base64.b64encode(output_bytes).decode(),
+                    "mediaType": CONTENT_TYPES.get(ext, "application/octet-stream"),
+                    "segmentCount": total,
+                    "cacheHits": result.cache_hits,
+                    "apiCalls": result.api_calls,
+                    "processingTimeMs": elapsed_ms,
+                })
+            except Exception as e:
+                logger.error("Stream translation failed: %s", e, exc_info=True)
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"type": "error", "message": str(e)}
+                )
+
+        fut = loop.run_in_executor(None, run_translation)
+
+        while True:
+            event = await queue.get()
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if event["type"] in ("done", "error"):
+                break
+
+        await fut
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Extract (internal / legacy) ───────────────────────────────────────────────
+
+@app.post("/extract", response_model=ExtractResponse)
+async def extract(file: UploadFile = File(...)):
+    ext = _ext(file.filename or "")
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"File too large: {len(file_bytes)} bytes")
+
+    try:
+        segments, file_type = _extract(file_bytes, file.filename or "", ext)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Extraction failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Extraction failed: {e}")
+
+    return ExtractResponse(segments=segments, file_type=file_type, segment_count=len(segments))
+
+
+# ── Reconstruct (internal / legacy) ──────────────────────────────────────────
+
 @app.post("/reconstruct")
 async def reconstruct(
     file: UploadFile = File(...),
     segments: str = Form(...),
 ):
-    """
-    Reconstruct a document with translated text segments.
-    
-    Accepts the original file and a JSON array of translated segments.
-    Returns the reconstructed file as downloadable bytes.
-    """
-    # Validate extension
-    ext = _get_extension(file.filename or "")
+    ext = _ext(file.filename or "")
     if ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {ext}",
-        )
+        raise HTTPException(400, f"Unsupported file type: {ext}")
 
-    # Read original file
     file_bytes = await file.read()
 
-    # Parse segments JSON
     try:
         segments_data = json.loads(segments)
         translated_segments = [Segment(**s) for s in segments_data]
-    except (json.JSONDecodeError, Exception) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid segments JSON: {str(e)}",
-        )
-
-    logger.info(
-        f"Reconstructing {file.filename} with {len(translated_segments)} translated segments"
-    )
+    except Exception as e:
+        raise HTTPException(400, f"Invalid segments JSON: {e}")
 
     try:
-        if ext == ".pdf":
-            result_bytes = reconstruct_pdf(file_bytes, translated_segments)
-            media_type = "application/pdf"
-        elif ext == ".docx":
-            result_bytes = reconstruct_docx(file_bytes, translated_segments)
-            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        elif ext in (".csv", ".tsv"):
-            result_bytes = reconstruct_csv(
-                file_bytes, translated_segments, file.filename or "file.csv"
-            )
-            media_type = "text/csv" if ext == ".csv" else "text/tab-separated-values"
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported: {ext}")
+        result_bytes = _reconstruct(file_bytes, translated_segments, file.filename or "", ext)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Reconstruction failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Reconstruction failed: {str(e)}")
+        logger.error("Reconstruction failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Reconstruction failed: {e}")
 
-    # Build output filename
-    original_name = file.filename or f"translated{ext}"
-    name_without_ext = original_name.rsplit(".", 1)[0]
-    output_filename = f"{name_without_ext}_translated{ext}"
-
-    logger.info(f"Reconstruction complete: {output_filename}")
+    name_stem = (file.filename or "file").rsplit(".", 1)[0]
+    output_filename = f"{name_stem}_translated{ext}"
 
     return Response(
         content=result_bytes,
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{output_filename}"',
-        },
+        media_type=CONTENT_TYPES.get(ext, "application/octet-stream"),
+        headers={"Content-Disposition": f'attachment; filename="{output_filename}"'},
     )

@@ -7,30 +7,15 @@ services:
     container_name: tmt-doc-service
     ports:
       - "8000:8000"
+    environment:
+      - TMT_API_URL=https://tmt.ilprl.ku.edu.np/lang-translate
+      - TMT_API_KEY=${TMT_API_KEY}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
-
-  orchestrator:
-    build:
-      context: ./orchestrator-java
-      dockerfile: Dockerfile
-    container_name: tmt-orchestrator
-    ports:
-      - "8080:8080"
-    environment:
-      - APP_DOC_SERVICE_URL=http://doc-service:8000
-      - APP_TMT_API_MOCK=false
-      - APP_TMT_API_URL=https://tmt.ilprl.ku.edu.np/lang-translate
-      - APP_TMT_API_KEY=${TMT_API_KEY}
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-    depends_on:
-      doc-service:
-        condition: service_healthy
-    restart: unless-stopped
 
   frontend:
     build:
@@ -40,5 +25,6 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - orchestrator
+      doc-service:
+        condition: service_healthy
     restart: unless-stopped
