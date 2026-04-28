@@ -8,13 +8,9 @@ venv/
 dist/
 build/
 
-# Java / Maven
-target/
-*.class
-*.jar
-*.war
-*.ear
-.mvn/wrapper/maven-wrapper.jar
+# Runtime generated — never commit
+.tmt-cache.json
+.tmt-cooldown
 
 # Node / React
 node_modules/
