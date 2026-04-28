@@ -68,12 +68,12 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
       <div className="flex flex-col gap-3 animate-fade-in">
         {/* File card */}
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between border-accent-blue/30 bg-accent-blue/5">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-accent-blue/20 rounded-xl">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="p-3 bg-accent-blue/20 rounded-xl flex-shrink-0">
               <FileText className="w-7 h-7 text-accent-blue" />
             </div>
-            <div>
-              <h3 className="font-semibold text-text-main leading-tight">{file.name}</h3>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-text-main leading-tight truncate">{file.name}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-accent-blue/20 text-accent-blue">{ext}</span>
                 <span className="text-xs text-text-muted">{(file.size / 1024).toFixed(1)} KB</span>
@@ -81,7 +81,7 @@ export function FileUpload({ file, setFile, onRemove, disabled, isProcessing }: 
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {!isProcessing && (
               <button
                 onClick={() => setShowPreview(p => !p)}
