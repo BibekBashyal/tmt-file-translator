@@ -142,7 +142,6 @@ function App() {
               sourceLang={sourceLang}
               targetLang={targetLang}
               previewMode={previewMode}
-              onTogglePreviewMode={() => setPreviewMode(p => !p)}
               onPreview={() => setShowDiff(true)}
               onReset={handleReset}
             />

@@ -1,4 +1,4 @@
-import { CheckCircle2, Layers, Zap, Clock, Server, Eye, RotateCcw, Check } from 'lucide-react';
+import { CheckCircle2, Layers, Zap, Clock, Server, Eye, RotateCcw } from 'lucide-react';
 import { Chip } from './ui/Chip';
 import { LanguageCode, LANGUAGES, TranslationStats } from '../types';
 
@@ -8,7 +8,6 @@ interface SuccessCardProps {
   sourceLang: LanguageCode;
   targetLang: LanguageCode;
   previewMode: boolean;
-  onTogglePreviewMode: () => void;
   onPreview: () => void;
   onReset: () => void;
 }
@@ -19,7 +18,6 @@ export function SuccessCard({
   sourceLang,
   targetLang,
   previewMode,
-  onTogglePreviewMode,
   onPreview,
   onReset,
 }: SuccessCardProps) {
@@ -76,27 +74,6 @@ export function SuccessCard({
         </button>
       </div>
 
-      {/* Preview preference reminder */}
-      <div className="relative group/pref mt-4">
-        <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-          <div
-            onClick={onTogglePreviewMode}
-            className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all duration-150
-              ${previewMode
-                ? 'bg-white border-white'
-                : 'bg-transparent border-border hover:border-text-muted'}`}
-          >
-            {previewMode && <Check className="w-2.5 h-2.5 text-primary" />}
-          </div>
-          <span className="text-xs text-text-muted hover:text-text-main transition-colors">
-            Preview before downloading
-          </span>
-        </label>
-        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 rounded-lg text-xs bg-gray-950 text-white whitespace-nowrap opacity-0 group-hover/pref:opacity-100 transition-opacity duration-150 pointer-events-none z-30 border border-white/10 shadow-xl">
-          When unchecked, the file downloads automatically<br />after translation without opening the preview.
-          <div className="absolute top-full left-4 border-x-4 border-x-transparent border-t-4 border-t-gray-950" />
-        </div>
-      </div>
     </div>
   );
 }
