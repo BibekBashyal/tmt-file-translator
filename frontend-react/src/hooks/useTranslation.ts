@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { LanguageCode, TranslationProgress, TranslationState, TranslationStats } from '../types';
+import { LanguageCode, SegmentDiff, TranslationProgress, TranslationState, TranslationStats } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
@@ -10,6 +10,8 @@ export function useTranslation() {
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [backoffUntil, setBackoffUntil] = useState<number | null>(null);
   const [resultFilename, setResultFilename] = useState<string>('');
+  const [translatedBlob, setTranslatedBlob] = useState<Blob | null>(null);
+  const [segments, setSegments] = useState<SegmentDiff[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   const translateFile = async (
@@ -22,6 +24,8 @@ export function useTranslation() {
     setStats(null);
     setProgress(null);
     setBackoffUntil(null);
+    setTranslatedBlob(null);
+    setSegments([]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -40,12 +44,12 @@ export function useTranslation() {
 
       if (!response.ok || !response.body) {
         const text = await response.text();
+        let message = text || 'Translation failed';
         try {
           const json = JSON.parse(text);
-          throw new Error(json.detail || json.message || 'Translation failed');
-        } catch {
-          throw new Error(text || 'Translation failed');
-        }
+          message = json.detail || json.message || text;
+        } catch { /* not JSON */ }
+        throw new Error(message);
       }
 
       const reader = response.body.getReader();
@@ -81,17 +85,10 @@ export function useTranslation() {
               processingTimeMs: event.processingTimeMs,
             });
             setResultFilename(event.filename);
+            setSegments(event.segments ?? []);
 
             const bytes = Uint8Array.from(atob(event.file), (c) => c.charCodeAt(0));
-            const blob = new Blob([bytes], { type: event.mediaType });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', event.filename);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode?.removeChild(link);
-            URL.revokeObjectURL(url);
+            setTranslatedBlob(new Blob([bytes], { type: event.mediaType }));
 
             setState('done');
           } else if (event.type === 'error') {
@@ -117,6 +114,8 @@ export function useTranslation() {
     setStats(null);
     setProgress(null);
     setBackoffUntil(null);
+    setTranslatedBlob(null);
+    setSegments([]);
   };
 
   const reset = () => {
@@ -125,7 +124,13 @@ export function useTranslation() {
     setStats(null);
     setProgress(null);
     setBackoffUntil(null);
+    setTranslatedBlob(null);
+    setSegments([]);
   };
 
-  return { state, error, stats, progress, backoffUntil, resultFilename, translateFile, cancel, reset };
+  return {
+    state, error, stats, progress, backoffUntil,
+    resultFilename, translatedBlob, segments,
+    translateFile, cancel, reset,
+  };
 }

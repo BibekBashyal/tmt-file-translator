@@ -233,6 +233,16 @@ async def translate_stream(
                     elapsed_ms = int((time.monotonic() - t0) * 1000)
                     name_stem = filename.rsplit(".", 1)[0]
                     output_filename = f"{name_stem}_translated{ext}"
+                    orig_text = {s.id: s.text for s in segments}
+                    segment_diffs = [
+                        {
+                            "id": s.id,
+                            "original": orig_text[s.id],
+                            "translated": s.text,
+                            "meta": s.meta.model_dump(exclude_none=True),
+                        }
+                        for s in result.segments
+                    ]
                     loop.call_soon_threadsafe(queue.put_nowait, {
                         "type": "done",
                         "filename": output_filename,
@@ -242,6 +252,7 @@ async def translate_stream(
                         "cacheHits": result.cache_hits,
                         "apiCalls": result.api_calls,
                         "processingTimeMs": elapsed_ms,
+                        "segments": segment_diffs,
                     })
                 except InterruptedError:
                     logger.info("Translation cancelled by client")

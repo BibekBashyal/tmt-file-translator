@@ -6,6 +6,7 @@ Cache is persisted to disk so warm runs skip API calls entirely.
 import json
 import logging
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
@@ -16,27 +17,40 @@ from app.tmt_client import translate_one
 logger = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(".tmt-cache.json")
+_MAX_CACHE_SIZE = 50_000
 
-# In-memory cache: cache_key → translated text
-_cache: Dict[str, str] = {}
+# In-memory LRU cache: oldest entry at the left, newest at the right.
+_cache: OrderedDict[str, str] = OrderedDict()
 
 
 def load_cache() -> None:
-    """Load persisted cache from disk on startup."""
+    """Load persisted cache from disk on startup, capping at _MAX_CACHE_SIZE newest entries."""
     if _CACHE_FILE.exists():
         try:
-            _cache.update(json.loads(_CACHE_FILE.read_text(encoding="utf-8")))
+            data: Dict[str, str] = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            # File is written oldest-first, so take the tail to keep the newest entries.
+            entries = list(data.items())
+            if len(entries) > _MAX_CACHE_SIZE:
+                dropped = len(entries) - _MAX_CACHE_SIZE
+                entries = entries[-_MAX_CACHE_SIZE:]
+                logger.warning("Cache file exceeded limit — dropped %d oldest entries on load", dropped)
+            _cache.update(entries)
             logger.info("Loaded %d cached translations from %s", len(_cache), _CACHE_FILE)
         except Exception as e:
             logger.warning("Could not load cache file: %s", e)
 
 
 def _persist(key: str, value: str) -> None:
-    """Write a new entry through to disk immediately."""
+    """Add or refresh an entry, evict the LRU entry if over the size cap, then flush to disk."""
+    if key in _cache:
+        _cache.move_to_end(key)
     _cache[key] = value
+    if len(_cache) > _MAX_CACHE_SIZE:
+        evicted_key, _ = _cache.popitem(last=False)
+        logger.debug("Cache full — evicted LRU entry (key prefix: %s…)", evicted_key[:40])
     try:
         _CACHE_FILE.write_text(
-            json.dumps(_cache, ensure_ascii=False, indent=None),
+            json.dumps(dict(_cache), ensure_ascii=False, indent=None),
             encoding="utf-8",
         )
     except Exception as e:
@@ -68,8 +82,10 @@ def translate_segments(
     uncached: List[Segment] = []
 
     for seg in segments:
-        hit = _cache.get(_key(seg.text, src_lang, tgt_lang))
+        k = _key(seg.text, src_lang, tgt_lang)
+        hit = _cache.get(k)
         if hit is not None:
+            _cache.move_to_end(k)  # mark as recently used so it survives eviction longer
             cached.append(seg.model_copy(update={"text": hit}))
         else:
             uncached.append(seg)

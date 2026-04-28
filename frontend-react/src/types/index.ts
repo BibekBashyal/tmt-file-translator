@@ -25,3 +25,10 @@ export interface TranslationProgress {
   current: number;
   total: number;
 }
+
+export interface SegmentDiff {
+  id: number;
+  original: string;
+  translated: string;
+  meta: Record<string, unknown>;
+}
