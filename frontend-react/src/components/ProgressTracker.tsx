@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, FileDown, ShieldAlert, Clock, AlertTriangle, X } from 'lucide-react';
 import { TranslationProgress, TranslationState } from '../types';
+import { useEta, formatEta } from '../hooks/useEta';
 
 interface ProgressTrackerProps {
   state: TranslationState;
@@ -10,51 +10,8 @@ interface ProgressTrackerProps {
   onCancel?: () => void;
 }
 
-function formatEta(seconds: number): string {
-  if (seconds < 5) return 'almost done';
-  if (seconds < 60) return `~${seconds}s remaining`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s === 0 ? `~${m}m remaining` : `~${m}m ${s}s remaining`;
-}
-
 export function ProgressTracker({ state, error, progress, backoffUntil, onCancel }: ProgressTrackerProps) {
-  const startTimeRef = useRef<number | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
-
-  // Track when translating starts for ETA
-  useEffect(() => {
-    if (state === 'translating' && startTimeRef.current === null) {
-      startTimeRef.current = Date.now();
-    }
-    if (state !== 'translating') {
-      startTimeRef.current = null;
-    }
-  }, [state]);
-
-  // Live countdown ticker for rate-limit backoff
-  useEffect(() => {
-    if (!backoffUntil) {
-      setCountdown(null);
-      return;
-    }
-    const tick = () => {
-      const left = Math.ceil((backoffUntil - Date.now()) / 1000);
-      setCountdown(left > 0 ? left : null);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [backoffUntil]);
-
-  const eta: number | null = (() => {
-    if (countdown !== null) return null; // suppress ETA during backoff
-    if (!progress || !startTimeRef.current || progress.current < 2) return null;
-    const elapsedSec = (Date.now() - startTimeRef.current) / 1000;
-    const rate = progress.current / elapsedSec;
-    const remaining = progress.total - progress.current;
-    return Math.ceil(remaining / rate);
-  })();
+  const { eta, countdown } = useEta(state, progress, backoffUntil);
 
   if (state === 'idle') return null;
 
@@ -78,13 +35,10 @@ export function ProgressTracker({ state, error, progress, backoffUntil, onCancel
     { id: 'done', label: 'Ready', desc: 'Translation complete.' },
   ];
 
-  const currentIndex =
-    state === 'done' ? 2 : state === 'translating' ? 1 : 0;
-
-  const pct =
-    progress && progress.total > 0
-      ? Math.round((progress.current / progress.total) * 100)
-      : 0;
+  const currentIndex = state === 'done' ? 2 : state === 'translating' ? 1 : 0;
+  const pct = progress && progress.total > 0
+    ? Math.round((progress.current / progress.total) * 100)
+    : 0;
 
   return (
     <div className="glass-panel rounded-2xl p-8 animate-slide-up mt-8 relative overflow-hidden">
@@ -104,22 +58,18 @@ export function ProgressTracker({ state, error, progress, backoffUntil, onCancel
                 key={step.id}
                 className={`flex items-start gap-4 flex-1 ${index !== 2 ? 'w-full md:border-r border-border md:pr-4' : ''}`}
               >
-                <div
-                  className={`
-                    w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-500
-                    ${isDoneState ? 'bg-accent-teal/20 text-accent-teal shadow-[0_0_15px_rgba(20,184,166,0.3)]' :
-                      isPast ? 'bg-accent-blue/20 text-accent-blue' :
-                      isActive ? 'bg-white/10 text-white animate-pulse' :
-                      'bg-secondary text-text-muted border border-border'}
-                  `}
-                >
-                  {isDoneState || isPast ? (
-                    <CheckCircle2 className="w-5 h-5" />
-                  ) : isActive ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <FileDown className="w-5 h-5" />
-                  )}
+                <div className={`
+                  w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-500
+                  ${isDoneState ? 'bg-accent-teal/20 text-accent-teal shadow-[0_0_15px_rgba(20,184,166,0.3)]' :
+                    isPast ? 'bg-accent-blue/20 text-accent-blue' :
+                    isActive ? 'bg-white/10 text-white animate-pulse' :
+                    'bg-secondary text-text-muted border border-border'}
+                `}>
+                  {isDoneState || isPast
+                    ? <CheckCircle2 className="w-5 h-5" />
+                    : isActive
+                      ? <Loader2 className="w-5 h-5 animate-spin" />
+                      : <FileDown className="w-5 h-5" />}
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -150,7 +100,6 @@ export function ProgressTracker({ state, error, progress, backoffUntil, onCancel
           })}
         </div>
 
-        {/* Bottom row: status info + cancel button */}
         {state === 'translating' && (
           <div className="flex items-center justify-between border-t border-border pt-4">
             {countdown !== null ? (

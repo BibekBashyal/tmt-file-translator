@@ -1,0 +1,43 @@
+name: Feature Request
+description: Suggest an improvement or new capability
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the suggestion!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem you're trying to solve
+      placeholder: "Currently there's no way to translate multiple files at once."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      placeholder: "Add a queue where users can drop multiple files and get a zip of translated results."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      placeholder: "Translate files one by one in separate browser tabs."
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Frontend / UI
+        - Backend / Translation pipeline
+        - File format support
+        - Performance / caching
+        - DevOps / deployment
+        - Other
+    validations:
+      required: true

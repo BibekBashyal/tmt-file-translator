@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { LanguageCode, SegmentDiff, TranslationProgress, TranslationState, TranslationStats } from '../types';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+import { API_V1 } from '../config';
+
+const API_BASE_URL = API_V1;
 
 export function useTranslation() {
   const [state, setState] = useState<TranslationState>('idle');

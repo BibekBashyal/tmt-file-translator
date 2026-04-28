@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from app.models import Segment
-from app.tmt_client import translate_one
+from app.tmt_client import client
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +119,11 @@ def translate_segments(
     for original in unique_texts:
         if cancel_event and cancel_event.is_set():
             raise InterruptedError("Translation cancelled by client")
-        translated = translate_one(original, src_lang, tgt_lang, on_backoff=on_backoff)
-        _persist(_key(original, src_lang, tgt_lang), translated)
+        output = client.translate_one(original, src_lang, tgt_lang, on_backoff=on_backoff)
+        if output.success:
+            _persist(_key(original, src_lang, tgt_lang), output.text)
         for seg in by_text[original]:
-            newly_translated.append(seg.model_copy(update={"text": translated}))
+            newly_translated.append(seg.model_copy(update={"text": output.text}))
             translated_count += 1
             if on_progress:
                 on_progress(translated_count, total)

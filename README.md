@@ -1,6 +1,11 @@
-# TMT File Translator — Google TMT Hackathon 2026
+# TMT File Translator
 
-**Track B2 Submission · Kathmandu University**
+[![CI](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![Node](https://img.shields.io/badge/Node-20-green)
+
+**Google TMT Hackathon 2026 · Track B2 · Kathmandu University**
 
 A document translation tool that preserves exact formatting and layout while translating between English, Nepali, and Tamang. Upload a PDF, DOCX, or CSV — get back the same file in the target language, pixel-accurate.
 
@@ -8,15 +13,16 @@ A document translation tool that preserves exact formatting and layout while tra
 
 ## Features
 
-### Translation
+### Translation pipeline
 - **SSE streaming** — live segment-by-segment progress instead of a single blocking wait
 - **Deduplication** — repeated sentences are translated once, applied everywhere
-- **Disk-persisted LRU cache** — translations survive server restarts; re-translating the same document is near-instant
+- **Disk-persisted LRU cache** — 50 000-entry cap; survives restarts; re-translating the same document is near-instant
 - **Rate-limit handling** — automatic 65-second backoff on TMT 429 responses with a live countdown in the UI
-- **Cancel mid-job** — abort button stops the translation immediately; already-cached segments are kept
+- **Cancel mid-job** — abort button stops translation immediately; already-cached segments are kept
 - **Request calibration** — probes the TMT API at startup to find the minimum safe interval between requests
 
 ### Format support
+
 | Format | What is preserved |
 |--------|-------------------|
 | `.pdf` | Exact coordinate mapping, Devanagari font scaling |
@@ -25,30 +31,28 @@ A document translation tool that preserves exact formatting and layout while tra
 
 ### UI
 - **Preview before downloading** — side-by-side diff view (original vs translated) inside a modal
-- **Inline editing** — edit any translated segment directly in the browser; modified segments are amber-highlighted
-- **Save & Download** — if edits were made, the file is reconstructed server-side before download
-- **Auto-download mode** — uncheck "Preview before downloading" and the file downloads automatically the moment translation finishes
-- **File preview & edit** — preview uploaded DOCX before translating; edit content and save back as a real `.docx`
-- **1 MB upload limit** — enforced both on drop and after in-browser edits
+- **Inline editing** — edit any translated segment in the browser; modified segments are amber-highlighted
+- **Save & Download** — edits trigger a server-side file reconstruction before download
+- **Auto-download mode** — uncheck "Preview before downloading" for an automatic download on completion
+- **File preview & edit** — preview uploaded DOCX/CSV before translating; edit content inline
 
 ---
 
 ## Architecture
-
-Two services only — Java orchestrator has been removed.
 
 ```
 ┌──────────────────────────────────────────────────┐
 │  React Frontend  (Port 3000)                     │
 │  Vite + TypeScript + Tailwind CSS v4             │
 └────────────────────┬─────────────────────────────┘
-                     │  SSE stream  (multipart POST)
+                     │  nginx reverse-proxy
+                     │  SSE stream / multipart POST
                      ▼
 ┌──────────────────────────────────────────────────┐
 │  Python Doc Service  (Port 8000)                 │
 │  FastAPI + PyMuPDF + python-docx                 │
 │                                                  │
-│  POST /api/v1/translate/stream                   │
+│  POST /api/v1/translate/stream   (SSE)           │
 │    ├─ extract segments from file                 │
 │    ├─ check LRU cache (50 000-entry cap)         │
 │    ├─ deduplicate unique texts                   │
@@ -56,7 +60,7 @@ Two services only — Java orchestrator has been removed.
 │    └─ stream progress events back to browser     │
 │                                                  │
 │  POST /reconstruct                               │
-│    └─ rebuild file with edited segments          │
+│    └─ rebuild file with user-edited segments     │
 │                                                  │
 │  .tmt-cache.json  (disk-persisted LRU)           │
 └──────────────────────────────────────────────────┘
@@ -67,29 +71,33 @@ Two services only — Java orchestrator has been removed.
 
 ### Cache design
 
-The cache lives in `.tmt-cache.json` and is loaded into an in-memory `OrderedDict` at startup.
+The cache lives in `.tmt-cache.json` (gitignored) and is loaded into an in-memory `OrderedDict` at startup.
 
-- **Key**: `"{src_lang}\0{tgt_lang}\0{original_text}"`
-- **Eviction**: LRU — when the in-memory dict exceeds 50 000 entries, the least-recently-used entry is dropped. Cache hits move the entry to the most-recent position.
-- **Write-through**: every new translation is flushed to disk immediately, so a crash mid-job loses at most the current in-flight segment.
-- **Startup trimming**: if the file on disk already exceeds 50 000 entries (written before the cap was introduced), the oldest entries are dropped on load and a warning is logged.
+| Property | Detail |
+|----------|--------|
+| Key | `"{src_lang}\0{tgt_lang}\0{original_text}"` |
+| Eviction | LRU — oldest entry dropped when the dict exceeds 50 000 entries |
+| Recency | Cache hits move the entry to most-recent position |
+| Write-through | Every new translation is flushed to disk immediately |
+| Startup trim | If the file on disk exceeds the cap, the oldest entries are dropped on load |
 
 ---
 
 ## Quick Start
 
 ### Requirements
-- Docker and Docker Compose
+
+- Docker & Docker Compose
 - A TMT API key
 
 ### 1. Configure environment
 
 ```bash
 cp .env.example .env
-# edit .env and set your TMT_API_KEY
+# Edit .env and set your TMT_API_KEY
 ```
 
-### 2. Run
+### 2. Start
 
 ```bash
 docker compose up --build
@@ -101,6 +109,23 @@ Open **http://localhost:3000**
 
 ```bash
 docker compose down
+```
+
+### Local development (no Docker)
+
+**Frontend:**
+```bash
+cd frontend-react
+npm install
+# Optional: create frontend-react/.env.local with VITE_API_BASE=http://localhost:8000
+npm run dev        # http://localhost:5173
+```
+
+**Backend:**
+```bash
+cd doc-service-python
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
 ---
@@ -118,17 +143,17 @@ Translates a document and streams progress as Server-Sent Events.
 | Field | Type | Description |
 |-------|------|-------------|
 | `file` | File | Document to translate (PDF, DOCX, CSV/TSV) |
-| `sourceLang` | string | Source language code (e.g. `en`) |
-| `targetLang` | string | Target language code (e.g. `ne`, `tam`) |
+| `sourceLang` | string | Source language code (`en`) |
+| `targetLang` | string | Target language code (`ne`, `tam`) |
 
 **SSE event types**
 
-| Event type | Payload fields | Description |
-|------------|---------------|-------------|
+| Type | Payload | Description |
+|------|---------|-------------|
 | `extracted` | `total` | Segments extracted, translation starting |
 | `segment` | `current`, `total` | One segment translated |
 | `backoff` | `seconds` | Rate-limited — waiting N seconds |
-| `done` | `filename`, `file` (base64), `mediaType`, `segments`, `segmentCount`, `cacheHits`, `apiCalls`, `processingTimeMs` | Translation complete |
+| `done` | `filename`, `file` (base64), `mediaType`, `segments`, `segmentCount`, `cacheHits`, `apiCalls`, `processingTimeMs` | Complete |
 | `error` | `message` | Fatal error |
 
 ### `POST /reconstruct`
@@ -146,7 +171,7 @@ Returns the reconstructed file as a binary response.
 
 ### `GET /health`
 
-Returns `{"status": "ok"}`. Used by Docker Compose healthcheck.
+Returns `{"status": "healthy", "service": "doc-service"}`.
 
 ---
 
@@ -154,38 +179,53 @@ Returns `{"status": "ok"}`. Used by Docker Compose healthcheck.
 
 ```
 tmt-file-translator/
+├── .github/
+│   ├── workflows/ci.yml           # Type-check + build on every push/PR
+│   ├── ISSUE_TEMPLATE/
+│   └── PULL_REQUEST_TEMPLATE.md
 ├── docker-compose.yml
 ├── .env.example
+├── LICENSE
+├── CONTRIBUTING.md
 │
 ├── doc-service-python/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── app/
-│       ├── main.py            # FastAPI routes + SSE streaming
-│       ├── translator.py      # Cache + dedup + orchestration
-│       ├── tmt_client.py      # TMT API client + rate-limit handling
-│       ├── models.py          # Pydantic models
-│       └── handlers/
-│           ├── pdf_handler.py
-│           ├── docx_handler.py
-│           └── csv_handler.py
+│       ├── main.py               # App init + router registration
+│       ├── config.py             # Shared constants (extensions, limits)
+│       ├── translator.py         # Cache + dedup + orchestration
+│       ├── tmt_client.py         # TMT API client (TmtClient class)
+│       ├── models.py             # Pydantic models
+│       ├── handlers/
+│       │   ├── pdf_handler.py
+│       │   ├── docx_handler.py
+│       │   └── csv_handler.py
+│       ├── routes/
+│       │   ├── translate.py      # /api/v1/translate + /stream
+│       │   └── files.py          # /extract + /reconstruct
+│       └── services/
+│           └── file_service.py   # Validation + extraction helpers
 │
 └── frontend-react/
     ├── Dockerfile
     ├── nginx.conf
     └── src/
         ├── App.tsx
+        ├── config.ts             # API base URL (reads VITE_API_BASE)
+        ├── constants.ts          # File-size / extension limits
         ├── hooks/
-        │   └── useTranslation.ts   # SSE stream consumer
+        │   ├── useTranslation.ts # SSE stream consumer + state machine
+        │   └── useEta.ts         # ETA calculation hook
         ├── components/
-        │   ├── FileUpload.tsx
-        │   ├── FilePreview.tsx
-        │   ├── LanguageSelector.tsx
-        │   ├── ProgressTracker.tsx  # Live progress + countdown + cancel
-        │   ├── DiffViewer.tsx       # Side-by-side segment editor
+        │   ├── ui/Chip.tsx
+        │   ├── preview/          # PDF / DOCX / CSV inline previewers
+        │   ├── DiffViewer.tsx    # Side-by-side segment editor
+        │   ├── ProgressTracker.tsx
+        │   ├── SuccessCard.tsx
         │   └── Modal.tsx
-        └── types/
-            └── index.ts
+        ├── types/index.ts
+        └── utils/download.ts
 ```
 
 ---
@@ -193,20 +233,27 @@ tmt-file-translator/
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS v4, Lucide Icons |
+|-------|------------|
+| Frontend | React 18, TypeScript 5, Vite 5, Tailwind CSS v4, Lucide Icons |
 | Backend | Python 3.12, FastAPI, Uvicorn |
 | Document parsing | PyMuPDF (PDF), python-docx (DOCX) |
 | HTTP client | httpx (sync, for TMT API calls) |
 | Streaming | Server-Sent Events via FastAPI `StreamingResponse` |
+| Reverse proxy | nginx (SSE buffering disabled) |
 | Containerisation | Docker, Docker Compose |
 
 ---
 
 ## Supported Languages
 
-| Code | Language |
-|------|----------|
-| `en` | English |
-| `ne` | Nepali |
-| `tam` | Tamang |
+| Code | Language | Native |
+|------|----------|--------|
+| `en` | English | English |
+| `ne` | Nepali | नेपाली |
+| `tam` | Tamang | तामाङ |
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, project layout, and contribution guidelines.

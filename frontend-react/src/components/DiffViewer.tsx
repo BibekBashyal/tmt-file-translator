@@ -1,11 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
-import {
-  Download, Pencil, X, Search, RefreshCw,
-  Zap, Layers, Clock, Server, RotateCcw,
-} from 'lucide-react';
+import { Download, Pencil, X, Search, RefreshCw, Zap, Layers, Clock, Server, RotateCcw } from 'lucide-react';
 import { LanguageCode, LANGUAGES, SegmentDiff, TranslationStats } from '../types';
-
-const API_BASE_URL = 'http://localhost:8000';
+import { Chip } from './ui/Chip';
+import { downloadBlob } from '../utils/download';
+import { API_BASE } from '../config';
 
 interface DiffViewerProps {
   segments: SegmentDiff[];
@@ -16,17 +14,6 @@ interface DiffViewerProps {
   targetLang: LanguageCode;
   originalFile: File;
   onReset: () => void;
-}
-
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.setAttribute('download', name);
-  document.body.appendChild(a);
-  a.click();
-  a.parentNode?.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 export function DiffViewer({
@@ -90,7 +77,7 @@ export function DiffViewer({
         'segments',
         JSON.stringify(segments.map((s) => ({ id: s.id, text: s.translated, meta: s.meta })))
       );
-      const res = await fetch(`${API_BASE_URL}/reconstruct`, { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/reconstruct`, { method: 'POST', body: formData });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(JSON.parse(text)?.detail ?? text ?? 'Reconstruction failed');
@@ -114,7 +101,7 @@ export function DiffViewer({
   return (
     <div className="flex flex-col h-full">
 
-      {/* ── Toolbar ────────────────────────────────────────────── */}
+      {/* Toolbar */}
       <div className="px-6 py-3 border-b border-border flex flex-wrap items-center gap-3 flex-shrink-0">
         <div className="relative w-48">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
@@ -127,7 +114,6 @@ export function DiffViewer({
           />
         </div>
 
-        {/* Stats */}
         <div className="hidden sm:flex items-center gap-1.5">
           <Chip icon={<Layers className="w-3 h-3" />} label={`${stats.segmentCount} segs`} />
           <Chip icon={<Zap className="w-3 h-3" />} label={`${cacheHitRate}% cached`} variant="teal" />
@@ -175,24 +161,26 @@ export function DiffViewer({
         </div>
       </div>
 
-      {/* ── Rebuild error ──────────────────────────────────────── */}
+      {/* Rebuild error */}
       {rebuildError && (
         <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-400 flex-shrink-0">
           {rebuildError}
         </div>
       )}
 
-      {/* ── Edit hint ──────────────────────────────────────────── */}
+      {/* Edit hint */}
       {editMode && (
         <div className="px-6 py-2 bg-accent-blue/5 border-b border-accent-blue/10 text-xs text-accent-blue/80 flex items-center justify-between flex-shrink-0">
           <span>Click any cell in the right column to edit. Changes are highlighted.</span>
           {hasEdits && (
-            <span className="font-medium text-amber-400">{modifiedIds.size} segment{modifiedIds.size !== 1 ? 's' : ''} modified</span>
+            <span className="font-medium text-amber-400">
+              {modifiedIds.size} segment{modifiedIds.size !== 1 ? 's' : ''} modified
+            </span>
           )}
         </div>
       )}
 
-      {/* ── Column headers ─────────────────────────────────────── */}
+      {/* Column headers */}
       <div className="grid grid-cols-[3rem_1fr_1fr] border-b border-border bg-white/[0.02] sticky top-0 z-10 flex-shrink-0">
         <div className="px-3 py-2.5" />
         <div className="px-5 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-widest border-r border-border">
@@ -203,7 +191,7 @@ export function DiffViewer({
         </div>
       </div>
 
-      {/* ── Segment rows ───────────────────────────────────────── */}
+      {/* Segment rows */}
       <div className="flex-1 overflow-y-auto divide-y divide-border/30 min-h-0">
         {filtered.length === 0 ? (
           <p className="text-center text-xs text-text-muted py-12">
@@ -218,26 +206,19 @@ export function DiffViewer({
                 className={`grid grid-cols-[3rem_1fr_1fr] group transition-colors
                   ${modified ? 'bg-amber-500/5' : 'hover:bg-white/[0.015]'}`}
               >
-                {/* Row number */}
                 <div className="flex items-start justify-center pt-3.5 pb-3">
-                  <span className="text-[10px] font-mono text-text-muted/40 leading-none">
-                    {seg.id}
-                  </span>
+                  <span className="text-[10px] font-mono text-text-muted/40 leading-none">{seg.id}</span>
                 </div>
-
-                {/* Original */}
                 <div className="px-5 py-3 text-sm text-text-muted leading-relaxed border-r border-border/40 select-text">
                   {seg.original}
                 </div>
-
-                {/* Translated */}
                 <div className={`px-5 py-3 text-sm leading-relaxed ${modified ? 'border-l-2 border-amber-400/50' : ''}`}>
                   {editMode ? (
                     <textarea
                       value={seg.translated}
                       onChange={(e) => updateSegment(seg.id, e.target.value)}
                       rows={Math.max(2, Math.ceil(seg.translated.length / 60))}
-                      className="w-full bg-secondary border border-border/60 rounded-md px-2.5 py-1.5 text-sm text-text-main outline-none focus:border-accent-blue resize-none leading-relaxed transition-colors placeholder:text-text-muted"
+                      className="w-full bg-secondary border border-border/60 rounded-md px-2.5 py-1.5 text-sm text-text-main outline-none focus:border-accent-blue resize-none leading-relaxed transition-colors"
                     />
                   ) : (
                     <span className={modified ? 'text-amber-200' : 'text-text-main'}>
@@ -251,7 +232,7 @@ export function DiffViewer({
         )}
       </div>
 
-      {/* ── Footer ─────────────────────────────────────────────── */}
+      {/* Footer */}
       <div className="px-6 py-3 border-t border-border flex items-center justify-between flex-shrink-0">
         <p className="text-xs text-text-muted">
           {filtered.length === segments.length
@@ -266,29 +247,6 @@ export function DiffViewer({
           New translation
         </button>
       </div>
-    </div>
-  );
-}
-
-function Chip({
-  icon,
-  label,
-  variant,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  variant?: 'teal';
-}) {
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border ${
-        variant === 'teal'
-          ? 'bg-accent-teal/10 border-accent-teal/20 text-accent-teal'
-          : 'bg-white/5 border-border text-text-muted'
-      }`}
-    >
-      {icon}
-      {label}
     </div>
   );
 }

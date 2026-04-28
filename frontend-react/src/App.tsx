@@ -5,9 +5,11 @@ import { LanguageSelector } from './components/LanguageSelector';
 import { ProgressTracker } from './components/ProgressTracker';
 import { DiffViewer } from './components/DiffViewer';
 import { Modal } from './components/Modal';
+import { SuccessCard } from './components/SuccessCard';
 import { useTranslation } from './hooks/useTranslation';
 import { LanguageCode, LANGUAGES } from './types';
-import { Sparkles, CheckCircle2, Layers, Zap, Clock, Server, Eye, RotateCcw, Check } from 'lucide-react';
+import { downloadBlob } from './utils/download';
+import { Sparkles, Check } from 'lucide-react';
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -39,16 +41,10 @@ function App() {
     reset();
   };
 
+  // Auto-download when preview mode is off
   useEffect(() => {
     if (state === 'done' && translatedBlob && !previewMode) {
-      const url = URL.createObjectURL(translatedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.setAttribute('download', resultFilename);
-      document.body.appendChild(a);
-      a.click();
-      a.parentNode?.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(translatedBlob, resultFilename);
     }
   }, [state, translatedBlob, previewMode, resultFilename]);
 
@@ -60,7 +56,7 @@ function App() {
 
         <main className="flex-1 w-full flex flex-col pb-12">
 
-          {/* Main Card — hidden once done */}
+          {/* Main card — hidden once done */}
           {state !== 'done' && (
             <div className="glass-panel rounded-3xl p-6 md:p-10 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-accent-teal/5 blur-[80px] rounded-full pointer-events-none" />
@@ -120,8 +116,6 @@ function App() {
                         Preview before downloading
                       </span>
                     </label>
-
-                    {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 px-3 py-2 rounded-lg text-xs bg-gray-950 text-white whitespace-nowrap opacity-0 group-hover/pref:opacity-100 transition-opacity duration-150 pointer-events-none z-30 border border-white/10 shadow-xl">
                       When unchecked, the file downloads automatically<br />after translation without opening the preview.
                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-x-transparent border-t-4 border-t-gray-950" />
@@ -142,54 +136,16 @@ function App() {
 
           {/* Success card */}
           {state === 'done' && translatedBlob && file && stats && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-slide-up mt-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-                {/* Icon + title */}
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="p-3 rounded-2xl bg-accent-teal/15 text-accent-teal shrink-0">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-text-main">Translation Complete</p>
-                    <p className="text-xs text-text-muted mt-0.5">
-                      {LANGUAGES[sourceLang]?.name ?? sourceLang} → {LANGUAGES[targetLang]?.name ?? targetLang} · {resultFilename}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Stats chips */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatChip icon={<Layers className="w-3 h-3" />} label={`${stats.segmentCount} segments`} />
-                  <StatChip
-                    icon={<Zap className="w-3 h-3" />}
-                    label={`${stats.segmentCount > 0 ? Math.round((stats.cacheHits / stats.segmentCount) * 100) : 0}% cached`}
-                    variant="teal"
-                  />
-                  <StatChip icon={<Server className="w-3 h-3" />} label={`${stats.apiCalls} API calls`} />
-                  <StatChip icon={<Clock className="w-3 h-3" />} label={`${(stats.processingTimeMs / 1000).toFixed(1)}s`} />
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex items-center gap-3 mt-6">
-                {previewMode && (
-                  <button
-                    onClick={() => setShowDiff(true)}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold bg-white text-primary hover:scale-105 transition-all shadow-[0_0_30px_rgba(255,255,255,0.15)]"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Preview &amp; Download
-                  </button>
-                )}
-                <button
-                  onClick={handleReset}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm text-text-muted border border-border hover:text-text-main hover:bg-white/5 transition-all"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  New Translation
-                </button>
-              </div>
-            </div>
+            <SuccessCard
+              stats={stats}
+              filename={resultFilename}
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+              previewMode={previewMode}
+              onTogglePreviewMode={() => setPreviewMode(p => !p)}
+              onPreview={() => setShowDiff(true)}
+              onReset={handleReset}
+            />
           )}
 
           {/* Diff modal */}
@@ -218,29 +174,6 @@ function App() {
           Kathmandu University · Google TMT Hackathon 2026 · Track B2
         </footer>
       </div>
-    </div>
-  );
-}
-
-function StatChip({
-  icon,
-  label,
-  variant,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  variant?: 'teal';
-}) {
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border ${
-        variant === 'teal'
-          ? 'bg-accent-teal/10 border-accent-teal/20 text-accent-teal'
-          : 'bg-white/5 border-border text-text-muted'
-      }`}
-    >
-      {icon}
-      {label}
     </div>
   );
 }
