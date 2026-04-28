@@ -1,6 +1,5 @@
 # TMT File Translator
 
-[![CI](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Node](https://img.shields.io/badge/Node-20-green)
 
@@ -184,7 +183,6 @@ tmt-file-translator/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── docker-compose.yml
 ├── .env.example
-├── CONTRIBUTING.md
 │
 ├── doc-service-python/
 │   ├── Dockerfile
@@ -254,4 +252,3 @@ tmt-file-translator/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, project layout, and contribution guidelines.
