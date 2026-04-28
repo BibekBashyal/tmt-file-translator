@@ -1,7 +1,6 @@
 # TMT File Translator
 
 [![CI](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/BibekBashyal/tmt-file-translator/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Node](https://img.shields.io/badge/Node-20-green)
 
@@ -185,7 +184,6 @@ tmt-file-translator/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── docker-compose.yml
 ├── .env.example
-├── LICENSE
 ├── CONTRIBUTING.md
 │
 ├── doc-service-python/
